@@ -54,7 +54,8 @@ export function Character({
   const features = deriveFaceFeatures(agentId, agentType);
 
   const armRaised = mood === "worried";
-  const holdingPhone = mood === "sleepy" || mood === "proud" || mood === "neutral";
+  // Only hold phone when truly idle — never when focused/concentrating (working/thinking)
+  const holdingPhone = mood === "sleepy";
 
   return (
     <svg width={120 * scale} height={150 * scale} viewBox="0 0 120 150" style={{ "--eyelid-color": fill } as React.CSSProperties}>

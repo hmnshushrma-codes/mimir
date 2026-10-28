@@ -96,6 +96,7 @@ export function ForemanDesk({
 }: ForemanDeskProps) {
   const [hovered, setHovered] = useState(false);
   const isDark = usePrefersDarkMode();
+  const active = agent.activeToolCalls[0];
   const isIdle = agent.mood === "sleepy";
   const isWorking = agent.mood === "focused" || agent.mood === "concentrating" || agent.mood === "excited";
 
@@ -163,6 +164,33 @@ export function ForemanDesk({
         {/* Keyboard on desk */}
         <rect x="78" y="152" width="44" height="5" rx="2" fill="#555" opacity="0.6" />
         <rect x="80" y="153" width="40" height="1.5" rx="0.5" fill="#666" opacity="0.4" />
+
+        {/* Typing hands animation when working */}
+        {isWorking && (
+          <g>
+            <rect x="84" y="149" width="6" height="4" rx="2" fill={teamColor} opacity="0.5">
+              <animate attributeName="y" values="149;147;149" dur="0.4s" repeatCount="indefinite" />
+            </rect>
+            <rect x="110" y="149" width="6" height="4" rx="2" fill={teamColor} opacity="0.5">
+              <animate attributeName="y" values="149;147;149" dur="0.35s" repeatCount="indefinite" />
+            </rect>
+          </g>
+        )}
+
+        {/* Thinking dots when focused but no active tool call */}
+        {isWorking && !active && (
+          <g transform="translate(140, 96)">
+            <circle cx="0" cy="0" r="2.5" fill={teamColor} opacity="0.6">
+              <animate attributeName="opacity" values="0.6;0.2;0.6" dur="1.2s" repeatCount="indefinite" />
+            </circle>
+            <circle cx="8" cy="0" r="2.5" fill={teamColor} opacity="0.4">
+              <animate attributeName="opacity" values="0.4;0.2;0.4" dur="1.2s" begin="0.2s" repeatCount="indefinite" />
+            </circle>
+            <circle cx="16" cy="0" r="2.5" fill={teamColor} opacity="0.3">
+              <animate attributeName="opacity" values="0.3;0.2;0.3" dur="1.2s" begin="0.4s" repeatCount="indefinite" />
+            </circle>
+          </g>
+        )}
 
         {/* === Layer 3: Desk front panel + nameplate (frontmost) === */}
         <rect x="20" y="158" width="160" height="42" rx="2" fill={deskColor} />
