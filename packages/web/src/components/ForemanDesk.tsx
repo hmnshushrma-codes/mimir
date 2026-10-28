@@ -2,6 +2,7 @@ import { useState } from "react";
 import type { SerializedAgent, ActionCategory } from "@agent-workshop/shared";
 import { Character } from "../characters/Character.js";
 import { usePrefersDarkMode } from "../hooks/usePrefersDarkMode.js";
+import { useIsDaytime } from "../hooks/useTimeOfDay.js";
 import { AgentTooltip } from "./AgentTooltip.js";
 
 const INK = "#1b1d23";
@@ -96,9 +97,12 @@ export function ForemanDesk({
 }: ForemanDeskProps) {
   const [hovered, setHovered] = useState(false);
   const isDark = usePrefersDarkMode();
+  const daytime = useIsDaytime();
   const active = agent.activeToolCalls[0];
-  const isIdle = agent.mood === "sleepy";
+  const isIdle = agent.mood === "sleepy" || agent.mood === "neutral";
   const isWorking = agent.mood === "focused" || agent.mood === "concentrating" || agent.mood === "excited";
+  // Desk lamp: ON at night, or when working during day
+  const lampOn = !daytime || isWorking;
 
   const deskColor = isDark ? "#3a3228" : "#9e7e5a";
   const deskTop = isDark ? "#4a4238" : "#b89870";
@@ -161,6 +165,25 @@ export function ForemanDesk({
           </g>
         )}
 
+        {/* Desk lamp */}
+        <g transform="translate(155, 108)">
+          {/* Lamp base */}
+          <ellipse cx="0" cy="40" rx="10" ry="3" fill="#555" />
+          {/* Lamp arm */}
+          <line x1="0" y1="40" x2="-5" y2="18" stroke="#666" strokeWidth="2.5" strokeLinecap="round" />
+          <line x1="-5" y1="18" x2="5" y2="0" stroke="#666" strokeWidth="2.5" strokeLinecap="round" />
+          {/* Lamp shade */}
+          <path d="M-2,-2 L-10,8 L20,8 L12,-2 Z" fill="#444" />
+          {/* Bulb glow */}
+          <circle cx="5" cy="6" r="3" fill={lampOn ? "#f5c842" : "#888"} opacity={lampOn ? 0.9 : 0.3}>
+            <animate attributeName="opacity" values={lampOn ? "0.8;0.9;0.8" : "0.3"} dur="2s" repeatCount="indefinite" />
+          </circle>
+          {/* Light cone when on */}
+          {lampOn && (
+            <path d="M-8,8 L-18,38 L28,38 L18,8 Z" fill="rgba(245,200,66,0.06)" />
+          )}
+        </g>
+
         {/* Keyboard on desk */}
         <rect x="78" y="152" width="44" height="5" rx="2" fill="#555" opacity="0.6" />
         <rect x="80" y="153" width="40" height="1.5" rx="0.5" fill="#666" opacity="0.4" />
@@ -174,6 +197,30 @@ export function ForemanDesk({
             <rect x="110" y="149" width="6" height="4" rx="2" fill={teamColor} opacity="0.5">
               <animate attributeName="y" values="149;147;149" dur="0.35s" repeatCount="indefinite" />
             </rect>
+          </g>
+        )}
+
+        {/* Phone when idle — foreman scrolling on his phone */}
+        {isIdle && (
+          <g transform="translate(42, 130)">
+            {/* Hand holding phone */}
+            <rect x="0" y="0" width="14" height="22" rx="3" fill="#222" stroke="#444" strokeWidth="0.8" />
+            {/* Screen glow */}
+            <rect x="1.5" y="2" width="11" height="16" rx="1.5" fill="#4488cc" opacity="0.5" />
+            {/* Content lines scrolling */}
+            <rect x="3" y="4" width="7" height="1.2" rx="0.5" fill="#fff" opacity="0.35">
+              <animate attributeName="y" values="4;14;4" dur="3s" repeatCount="indefinite" />
+            </rect>
+            <rect x="3" y="8" width="5" height="1.2" rx="0.5" fill="#fff" opacity="0.25">
+              <animate attributeName="y" values="8;18;8" dur="3s" repeatCount="indefinite" />
+            </rect>
+            <rect x="3" y="12" width="8" height="1.2" rx="0.5" fill="#fff" opacity="0.3">
+              <animate attributeName="y" values="12;22;12" dur="3s" repeatCount="indefinite" />
+            </rect>
+            {/* Thumb tapping */}
+            <ellipse cx="7" cy="20" rx="4" ry="3" fill={teamColor} opacity="0.3">
+              <animate attributeName="ry" values="3;2.5;3" dur="1.5s" repeatCount="indefinite" />
+            </ellipse>
           </g>
         )}
 

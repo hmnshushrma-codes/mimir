@@ -295,6 +295,11 @@ body {
   height: 180px;
   position: relative;
   overflow: hidden;
+  transition: background 1.5s ease;
+}
+
+.workshop-floor {
+  transition: background 1.5s ease;
 }
 
 .room-backdrop-svg {
@@ -806,6 +811,23 @@ body {
 @keyframes blink {
   0%, 92%, 100% { opacity: 0; }
   94%, 96% { opacity: 1; }
+}
+
+/* ---------- Splash screen ---------- */
+
+.splash-screen {
+  position: fixed;
+  inset: 0;
+  z-index: 200;
+  background: #0d0f14;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.splash-svg {
+  max-width: 90vw;
+  max-height: 80vh;
 }
 
 /* ---------- Avatar wizard ---------- */

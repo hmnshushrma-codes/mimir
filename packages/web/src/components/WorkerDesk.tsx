@@ -6,6 +6,7 @@ import { nameFor } from "../characters/names.js";
 import { roleFor } from "../characters/faceFeatures.js";
 import { classifyAgentVisibility } from "../characters/agentVisibility.js";
 import { usePrefersDarkMode } from "../hooks/usePrefersDarkMode.js";
+import { useIsDaytime } from "../hooks/useTimeOfDay.js";
 import { AgentTooltip } from "./AgentTooltip.js";
 
 function roleLabel(agentId: string, agentType: string | null): string {
@@ -93,10 +94,13 @@ export function WorkerDesk({
 }: WorkerDeskProps) {
   const [hovered, setHovered] = useState(false);
   const isDark = usePrefersDarkMode();
+  const daytime = useIsDaytime();
   const visibility = classifyAgentVisibility(agent, nowMs);
   const finished = visibility === "finished";
   const isWorking = agent.mood === "focused" || agent.mood === "concentrating" || agent.mood === "excited";
-  const isResting = agent.mood === "sleepy" || agent.mood === "proud" || finished;
+  const isSleeping = agent.mood === "sleepy" || agent.mood === "proud" || finished;
+  const isError = agent.mood === "dizzy" || agent.mood === "frustrated";
+  const lampOn = !daytime || isWorking;
 
   const deskColor = isDark ? "#332c24" : "#8e7050";
   const deskTop = isDark ? "#423a30" : "#a88860";
@@ -153,13 +157,63 @@ export function WorkerDesk({
             <WorkerMonitorContent category={agent.state.category} teamColor={teamColor} />
           </g>
         )}
-        {isResting && (
+        {isSleeping && (
           <g>
             {/* Tea mug on desk */}
             <rect x="112" y="106" width="12" height="14" rx="2" fill={isDark ? "#6a5040" : "#c9a06a"} />
             <rect x="124" y="110" width="6" height="4" rx="2" fill={isDark ? "#6a5040" : "#c9a06a"} />
             {/* Steam */}
             <path d="M116,104 Q118,100 116,96" fill="none" stroke={isDark ? "#666" : "#aaa"} strokeWidth="0.8" opacity="0.5" />
+          </g>
+        )}
+
+        {/* Desk lamp */}
+        <g transform="translate(120, 82)">
+          <ellipse cx="0" cy="32" rx="7" ry="2.5" fill="#555" />
+          <line x1="0" y1="32" x2="-3" y2="14" stroke="#666" strokeWidth="2" strokeLinecap="round" />
+          <line x1="-3" y1="14" x2="4" y2="0" stroke="#666" strokeWidth="2" strokeLinecap="round" />
+          <path d="M0,-2 L-7,6 L15,6 L8,-2 Z" fill="#444" />
+          <circle cx="4" cy="4" r="2.5" fill={lampOn ? "#f5c842" : "#888"} opacity={lampOn ? 0.9 : 0.3} />
+          {lampOn && (
+            <path d="M-5,6 L-12,30 L20,30 L13,6 Z" fill="rgba(245,200,66,0.05)" />
+          )}
+        </g>
+
+        {/* Typing hands when working */}
+        {isWorking && (
+          <g>
+            <rect x="56" y="116" width="5" height="3" rx="1.5" fill={teamColor} opacity="0.45">
+              <animate attributeName="y" values="116;114;116" dur="0.45s" repeatCount="indefinite" />
+            </rect>
+            <rect x="76" y="116" width="5" height="3" rx="1.5" fill={teamColor} opacity="0.45">
+              <animate attributeName="y" values="116;114;116" dur="0.38s" repeatCount="indefinite" />
+            </rect>
+          </g>
+        )}
+
+        {/* Zzz floating when sleeping/done */}
+        {isSleeping && (
+          <g className="zzz-anim">
+            <text x="105" y="60" fill={isDark ? "#888" : "#aaa"} fontSize="10" fontWeight="700" fontFamily="sans-serif" opacity="0.7">
+              Z<animate attributeName="y" values="60;50;60" dur="2s" repeatCount="indefinite" />
+              <animate attributeName="opacity" values="0.7;0.2;0.7" dur="2s" repeatCount="indefinite" />
+            </text>
+            <text x="115" y="50" fill={isDark ? "#888" : "#aaa"} fontSize="8" fontWeight="700" fontFamily="sans-serif" opacity="0.5">
+              z<animate attributeName="y" values="50;42;50" dur="2.2s" repeatCount="indefinite" />
+              <animate attributeName="opacity" values="0.5;0.1;0.5" dur="2.2s" repeatCount="indefinite" />
+            </text>
+            <text x="122" y="44" fill={isDark ? "#888" : "#aaa"} fontSize="6" fontWeight="700" fontFamily="sans-serif" opacity="0.3">
+              z<animate attributeName="y" values="44;38;44" dur="2.5s" repeatCount="indefinite" />
+              <animate attributeName="opacity" values="0.3;0.05;0.3" dur="2.5s" repeatCount="indefinite" />
+            </text>
+          </g>
+        )}
+
+        {/* Error indicator */}
+        {isError && (
+          <g>
+            <circle cx="130" cy="70" r="6" fill="#e34948" opacity="0.85" />
+            <text x="130" y="74" textAnchor="middle" fill="#fff" fontSize="9" fontWeight="700" fontFamily="sans-serif">!</text>
           </g>
         )}
 

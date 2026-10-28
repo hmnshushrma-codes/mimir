@@ -1,7 +1,8 @@
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { useWorkshopStore } from "./store/useWorkshopStore.js";
 import { connectDataSource } from "./data/connect.js";
 import { ConnectionBadge } from "./components/ConnectionBadge.js";
+import { SplashScreen } from "./components/SplashScreen.js";
 import { DebugView } from "./views/DebugView.js";
 import { WorkshopView } from "./views/WorkshopView.js";
 
@@ -11,6 +12,8 @@ const BASE_TITLE = "Mimir";
 
 export function App() {
   const [tab, setTab] = useState<Tab>("workshop");
+  const [showSplash, setShowSplash] = useState(true);
+  const hideSplash = useCallback(() => setShowSplash(false), []);
   const status = useWorkshopStore((s) => s.status);
   const sessionsById = useWorkshopStore((s) => s.sessions);
   // Object.values(sessionsById) inside the selector itself would return a
@@ -32,6 +35,7 @@ export function App() {
 
   return (
     <div className="app">
+      {showSplash && <SplashScreen onComplete={hideSplash} />}
       <header className="app-header">
         <span className="app-title">Mimir</span>
         <nav className="tabs">
