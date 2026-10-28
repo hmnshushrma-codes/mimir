@@ -1,0 +1,25 @@
+node_modules/
+dist/
+*.log
+.DS_Store
+*.sqlite
+*.sqlite-journal
+.env
+.env.local
+*.bak
+
+# Prompt files (not part of the project)
+agent-workshop-prompt.md
+agent-workshop-v2-prompt.md
+
+# Docs are internal notes, not shipped
+docs/
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# OS
+Thumbs.db

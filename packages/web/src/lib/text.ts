@@ -1,0 +1,12 @@
+export function truncate(text: string, maxLen: number): string {
+  return text.length <= maxLen ? text : `${text.slice(0, maxLen - 1)}…`;
+}
+
+export function relativeTime(iso: string, nowMs: number): string {
+  const diff = nowMs - Date.parse(iso);
+  if (!Number.isFinite(diff) || diff < 0) return "just now";
+  if (diff < 60_000) return "just now";
+  if (diff < 3_600_000) return `${Math.floor(diff / 60_000)}m ago`;
+  if (diff < 86_400_000) return `${Math.floor(diff / 3_600_000)}h ago`;
+  return new Date(iso).toLocaleDateString();
+}

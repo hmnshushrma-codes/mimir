@@ -1,0 +1,28 @@
+{
+  "name": "mimir-cli",
+  "version": "0.1.0",
+  "description": "Mimir — the all-knowing oracle for Claude Code sessions. Live animated visualization of agents, subagents, and tool calls.",
+  "type": "module",
+  "bin": {
+    "mimir": "./dist/main.js"
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "typecheck": "tsc --noEmit",
+    "lint": "eslint src"
+  },
+  "dependencies": {
+    "@agent-workshop/shared": "workspace:*",
+    "@agent-workshop/server": "workspace:*",
+    "@agent-workshop/hooks": "workspace:*"
+  },
+  "devDependencies": {
+    "@types/node": "^24.0.0",
+    "typescript": "^5.6.3"
+  },
+  "engines": {
+    "node": ">=22.5.0"
+  },
+  "keywords": ["claude", "claude-code", "agent", "visualization", "hooks", "developer-tools"],
+  "license": "MIT"
+}
