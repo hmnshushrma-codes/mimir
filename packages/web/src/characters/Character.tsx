@@ -54,7 +54,8 @@ export function Character({
   const features = deriveFaceFeatures(agentId, agentType);
 
   const armRaised = mood === "worried";
-  const holdingPhone = false; // Phone is handled per-desk component, not here
+  // Phone/props are handled per-desk component (ForemanDesk/WorkerDesk), not here
+  const holdingPhone = false;
 
   return (
     <svg width={120 * scale} height={150 * scale} viewBox="0 0 120 150" style={{ "--eyelid-color": fill } as React.CSSProperties}>
