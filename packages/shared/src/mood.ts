@@ -30,6 +30,10 @@ export interface MoodContext {
   /** Consecutive PostToolUseFailure events with no success in between. */
   consecutiveErrors: number;
   nowIso: string;
+  /** True for the main/foreman agent — affects idle behavior. */
+  isForeman?: boolean;
+  /** True when any subagent in this session is still actively working. */
+  hasActiveSubagents?: boolean;
 }
 
 export const DEFAULT_LONG_TOOL_CALL_MS = 15_000;
@@ -52,6 +56,12 @@ export function deriveMood(ctx: MoodContext, longToolCallMs: number = DEFAULT_LO
     case "done":
       return "proud";
     case "idle":
+      // Foreman with active subagents is "supervising" (concentrating), not sleeping.
+      // Foreman alone between tool calls is "thinking" (focused), not sleeping.
+      if (ctx.isForeman) {
+        if (ctx.hasActiveSubagents) return "concentrating";
+        return "focused";
+      }
       return "sleepy";
     case "working": {
       if (ctx.category === "delegate") return "excited";

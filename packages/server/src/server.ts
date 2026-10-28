@@ -95,9 +95,15 @@ export function buildApp({ config, db, model = new WorkshopModel(), hub = new Ws
   const app = Fastify({ logger: false });
 
   // Serve the pre-built web app if it exists (production mode).
-  // In dev mode (pnpm dev), the Vite dev server handles the frontend instead.
+  // Check multiple paths: dev layout (../../web/dist) and bundled layout (../web or ./web)
   const __dirname = dirname(fileURLToPath(import.meta.url));
-  const webDistPath = resolve(__dirname, "../../web/dist");
+  const candidates = [
+    resolve(__dirname, "../../web/dist"),  // dev: packages/server/dist -> packages/web/dist
+    resolve(__dirname, "../web"),           // bundled: dist/server -> dist/web
+    resolve(__dirname, "./web"),            // bundled flat: dist/mimir.mjs -> dist/web
+    resolve(__dirname, "web"),              // relative
+  ];
+  const webDistPath = candidates.find((p) => existsSync(resolve(p, "index.html"))) ?? candidates[0];
   if (existsSync(webDistPath)) {
     app.register(fastifyStatic, { root: webDistPath, prefix: "/" });
     // SPA fallback: serve index.html for any non-API, non-file route

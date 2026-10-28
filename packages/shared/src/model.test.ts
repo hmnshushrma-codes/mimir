@@ -395,7 +395,8 @@ describe("WorkshopModel mood integration", () => {
     const idle = model.ingest(
       envelope({ session_id: "s1", hook_event_name: "PostToolUse", tool_name: "Bash", tool_input: { command: "ls" }, tool_output: "ok", tool_use_id: "tu1" }, "2026-01-01T00:00:01.000Z")
     );
-    expect(idle.agent.mood).toBe("sleepy");
+    // Foreman stays "focused" when idle (thinking between tool calls), never "sleepy"
+    expect(idle.agent.mood).toBe("focused");
   });
 
   it("a delegate tool call sets mood to excited", () => {

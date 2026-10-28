@@ -134,14 +134,27 @@ export class WorkshopModel {
     return earliest;
   }
 
+  private hasActiveSubagents(session: SessionRecord): boolean {
+    for (const a of session.agents.values()) {
+      if (a.id !== MAIN_AGENT_ID && a.presence === "active" &&
+          a.state.lifecycle !== "done" && a.state.lifecycle !== "leaving") {
+        return true;
+      }
+    }
+    return false;
+  }
+
   private recomputeMood(agent: AgentRecord, nowIso: string): void {
+    const session = this.sessions.get(agent.sessionId);
     agent.mood = deriveMood(
       {
         lifecycle: agent.state.lifecycle,
         category: agent.state.category,
         activeToolCallStartedAt: this.earliestActiveToolCallStart(agent),
         consecutiveErrors: agent.consecutiveErrors,
-        nowIso
+        nowIso,
+        isForeman: agent.id === MAIN_AGENT_ID,
+        hasActiveSubagents: session ? this.hasActiveSubagents(session) : false
       },
       this.longToolCallMs
     );
@@ -312,9 +325,24 @@ export class WorkshopModel {
     const touched: Array<{ sessionId: string; agentId: string }> = [];
     const now = Date.parse(nowIso);
     for (const session of this.sessions.values()) {
+      // Check if any subagent in this session is still active
+      let hasActiveSubagent = false;
+      for (const agent of session.agents.values()) {
+        if (agent.id !== MAIN_AGENT_ID && agent.presence === "active" && agent.state.lifecycle !== "done" && agent.state.lifecycle !== "leaving") {
+          hasActiveSubagent = true;
+          break;
+        }
+      }
+
       for (const agent of session.agents.values()) {
         const elapsed = now - Date.parse(agent.lastEventAt);
-        const next: Presence = elapsed >= staleMs ? "stale" : elapsed >= idleMs ? "idle" : "active";
+        let next: Presence = elapsed >= staleMs ? "stale" : elapsed >= idleMs ? "idle" : "active";
+
+        // Foreman stays active while any subagent is working (supervising)
+        if (agent.id === MAIN_AGENT_ID && hasActiveSubagent && next !== "active") {
+          next = "active";
+        }
+
         if (next !== agent.presence) {
           agent.presence = next;
           touched.push({ sessionId: session.id, agentId: agent.id });

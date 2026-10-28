@@ -145,7 +145,8 @@ async function cmdStart(demo: boolean): Promise<void> {
   const db = openDb(config.dbPath);
   const app = buildApp({ config, db });
 
-  const url = `http://${config.host === "0.0.0.0" ? "localhost" : config.host}:${config.port}`;
+  const displayHost = config.host === "0.0.0.0" || config.host === "127.0.0.1" ? "mimir.local" : config.host;
+  const url = `http://${displayHost}:${config.port}`;
   const fullUrl = demo ? `${url}/?demo=1` : url;
 
   await app.listen({ port: config.port, host: config.host });
@@ -153,7 +154,7 @@ async function cmdStart(demo: boolean): Promise<void> {
   console.log(`
   ┌──────────────────────────────────────────┐
   │                                          │
-  │   Agent Workshop is running              │
+  │   Mimir is running                       │
   │                                          │
   │   ${fullUrl.padEnd(38)} │
   │                                          │
