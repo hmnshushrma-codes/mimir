@@ -54,8 +54,7 @@ export function Character({
   const features = deriveFaceFeatures(agentId, agentType);
 
   const armRaised = mood === "worried";
-  // Only hold phone when truly idle — never when focused/concentrating (working/thinking)
-  const holdingPhone = mood === "sleepy";
+  const holdingPhone = false; // Phone is handled per-desk component, not here
 
   return (
     <svg width={120 * scale} height={150 * scale} viewBox="0 0 120 150" style={{ "--eyelid-color": fill } as React.CSSProperties}>
