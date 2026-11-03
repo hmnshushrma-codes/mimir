@@ -8,7 +8,8 @@
     ".": "./dist/index.js",
     "./config": "./dist/config.js",
     "./db": "./dist/db.js",
-    "./server": "./dist/server.js"
+    "./server": "./dist/server.js",
+    "./replay-summary": "./dist/replay-summary.js"
   },
   "scripts": {
     "dev": "tsx watch src/index.ts",

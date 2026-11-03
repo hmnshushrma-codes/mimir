@@ -17,24 +17,32 @@ import {
 } from "@agent-workshop/shared";
 import type { ServerConfig } from "./config.js";
 import {
+  getProjectNotes,
+  getSessionRecap,
   insertEvent,
   listAllEventsRaw,
   listProjects,
   listSessionEvents,
   listSessions,
+  searchEvents,
   upsertProject,
+  upsertProjectNotes,
   upsertSession,
+  upsertSessionRecap,
   type StoredEventRow
 } from "./db.js";
 import { enrichSubagentCorrelation } from "./correlation.js";
 import { resolveProject } from "./project-resolver.js";
 import { WsHub } from "./ws-hub.js";
 import { DetectedSessionScanner } from "./detect-sessions.js";
+import { buildRecapTranscript, generateRecap as defaultGenerateRecap } from "./recap.js";
 
 export interface BuildAppOptions {
   config: ServerConfig;
   db: DatabaseSync;
   model?: WorkshopModel;
+  /** Injectable for tests — the default shells out to the local `claude` CLI. */
+  generateRecap?: (transcript: string) => Promise<string>;
   hub?: WsHub;
 }
 
@@ -85,7 +93,17 @@ function rehydrateModel(model: WorkshopModel, db: DatabaseSync): number {
   return replayed;
 }
 
-export function buildApp({ config, db, model = new WorkshopModel(), hub = new WsHub() }: BuildAppOptions): FastifyInstance {
+export function buildApp({
+  config,
+  db,
+  model = new WorkshopModel(config.longToolCallMs, {
+    stalledAfterMs: config.stalledAfterMs,
+    sleepAfterMs: config.sleepAfterMs,
+    needsInputTools: config.needsInputTools
+  }),
+  hub = new WsHub(),
+  generateRecap = defaultGenerateRecap
+}: BuildAppOptions): FastifyInstance {
   // Rehydrate the model from stored events so we don't lose state on restart
   const rehydrated = rehydrateModel(model, db);
   if (rehydrated > 0) {
@@ -214,6 +232,54 @@ export function buildApp({ config, db, model = new WorkshopModel(), hub = new Ws
     }
   );
 
+  app.get<{ Querystring: { q?: string; projectId?: string; limit?: string } }>("/search", async (request, reply) => {
+    const q = request.query.q?.trim();
+    if (!q) {
+      reply.code(400);
+      return { error: "q is required" };
+    }
+    const limit = request.query.limit ? Number.parseInt(request.query.limit, 10) : undefined;
+    return searchEvents(db, { q, projectId: request.query.projectId, limit });
+  });
+
+  app.get<{ Params: { id: string } }>("/sessions/:id/recap", async (request) => {
+    return getSessionRecap(db, request.params.id);
+  });
+
+  app.post<{ Params: { id: string } }>("/sessions/:id/recap", async (request, reply) => {
+    const events = listSessionEvents(db, request.params.id, { limit: 5000 });
+    const transcript = buildRecapTranscript(events);
+    if (!transcript) {
+      reply.code(422);
+      return { error: "no recap-worthy activity in this session yet" };
+    }
+    let recap: string;
+    try {
+      recap = await generateRecap(transcript);
+    } catch (err) {
+      reply.code(502);
+      return { error: `recap generation failed: ${(err as Error).message}` };
+    }
+    const row = { sessionId: request.params.id, recap, model: "claude", generatedAt: new Date().toISOString() };
+    upsertSessionRecap(db, row);
+    return row;
+  });
+
+  app.get<{ Params: { id: string } }>("/projects/:id/notes", async (request) => {
+    const row = getProjectNotes(db, request.params.id);
+    return row ?? { projectId: request.params.id, notes: "", updatedAt: null };
+  });
+
+  app.put<{ Params: { id: string }; Body: { notes: string } }>("/projects/:id/notes", async (request, reply) => {
+    if (typeof request.body?.notes !== "string") {
+      reply.code(400);
+      return { error: "notes must be a string" };
+    }
+    const updatedAt = new Date().toISOString();
+    upsertProjectNotes(db, request.params.id, request.body.notes, updatedAt);
+    return { projectId: request.params.id, notes: request.body.notes, updatedAt };
+  });
+
   const detector = new DetectedSessionScanner(config.detectWindowMs, (sessionId) => Boolean(model.getSession(sessionId)));
   detector.scan();
   const detectTimer = setInterval(() => detector.scan(), config.detectScanIntervalMs);
@@ -228,7 +294,7 @@ export function buildApp({ config, db, model = new WorkshopModel(), hub = new Ws
     const agentTouched = [
       ...model.sweepPresence(now, config.idleMs, config.staleMs),
       ...model.sweepDepartures(now, config.departAfterMs),
-      ...model.sweepMoods(now)
+      ...model.sweepDisplayStates(now)
     ];
     const dedupedAgents = new Map(agentTouched.map((t) => [`${t.sessionId}:${t.agentId}`, t]));
     for (const { sessionId, agentId } of dedupedAgents.values()) {

@@ -57,7 +57,11 @@ function isOurHandler(handler: HookHandler): boolean {
 }
 
 function ourHandler(hookScriptPath: string): HookHandler {
-  return { type: "command", command: `node ${hookScriptPath}`, timeout: 1 };
+  // Use the exec-form `args` array (spawned directly, no shell) rather than a
+  // single command string — on Windows, hook commands run through Git Bash by
+  // default, which treats backslashes as escape characters and mangles
+  // Windows-style paths like C:\Users\...\hook-runner.mjs.
+  return { type: "command", command: "node", args: [hookScriptPath], timeout: 1 };
 }
 
 export interface InstalledHookEntry {

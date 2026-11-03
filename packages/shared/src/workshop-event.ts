@@ -136,7 +136,7 @@ export function deriveAgentEvent(envelope: HookEventEnvelope): AgentEvent | null
     case "PreToolUse": {
       const parsed = PreToolUseDetailSchema.safeParse(envelope);
       if (!parsed.success) return null;
-      return { type: "TOOL_STARTED", category: categorizeTool(parsed.data.tool_name), at };
+      return { type: "TOOL_STARTED", at };
     }
 
     case "PostToolUse": {
@@ -159,22 +159,32 @@ export function deriveAgentEvent(envelope: HookEventEnvelope): AgentEvent | null
       return null;
     }
 
-    case "SubagentStop": {
-      const parsed = SubagentStopDetailSchema.safeParse(envelope);
+    case "UserPromptSubmit": {
+      const parsed = UserPromptSubmitDetailSchema.safeParse(envelope);
       if (!parsed.success) return null;
-      return { type: "STOPPED", at };
+      return { type: "PROMPT_SUBMITTED", at };
     }
 
+    // Only ever fired for the main session — subagents get SubagentStop
+    // instead. This is what makes `awaitingPrompt` foreman-only by
+    // construction rather than by an explicit isForeman check (see
+    // docs/agent-states.md).
     case "Stop": {
       const parsed = StopDetailSchema.safeParse(envelope);
       if (!parsed.success) return null;
-      return { type: "STOPPED", at };
+      return { type: "AWAIT_PROMPT", at };
+    }
+
+    case "SubagentStop": {
+      const parsed = SubagentStopDetailSchema.safeParse(envelope);
+      if (!parsed.success) return null;
+      return { type: "DONE", at };
     }
 
     case "SessionEnd": {
       const parsed = SessionEndDetailSchema.safeParse(envelope);
       if (!parsed.success) return null;
-      return { type: "STOPPED", at };
+      return { type: "DONE", at };
     }
 
     default:

@@ -5,8 +5,9 @@ import { ConnectionBadge } from "./components/ConnectionBadge.js";
 import { SplashScreen } from "./components/SplashScreen.js";
 import { DebugView } from "./views/DebugView.js";
 import { WorkshopView } from "./views/WorkshopView.js";
+import { DashboardView } from "./views/DashboardView.js";
 
-type Tab = "workshop" | "debug";
+type Tab = "workshop" | "dashboard" | "debug";
 
 const BASE_TITLE = "Mimir";
 
@@ -16,6 +17,24 @@ export function App() {
   const hideSplash = useCallback(() => setShowSplash(false), []);
   const status = useWorkshopStore((s) => s.status);
   const sessionsById = useWorkshopStore((s) => s.sessions);
+  const setProjectFilter = useWorkshopStore((s) => s.setProjectFilter);
+  const setFocusedSession = useWorkshopStore((s) => s.setFocusedSession);
+  const debugOverlayEnabled = useWorkshopStore((s) => s.debugOverlayEnabled);
+  const toggleDebugOverlay = useWorkshopStore((s) => s.toggleDebugOverlay);
+  const openProjectInWorkshop = useCallback(
+    (projectId: string) => {
+      setProjectFilter(projectId);
+      setTab("workshop");
+    },
+    [setProjectFilter]
+  );
+  const openSessionInWorkshop = useCallback(
+    (sessionId: string) => {
+      setFocusedSession(sessionId);
+      setTab("workshop");
+    },
+    [setFocusedSession]
+  );
   // Object.values(sessionsById) inside the selector itself would return a
   // new array every call, which trips React's "getSnapshot should be
   // cached" infinite-loop guard. Derive it here instead, memoized on the
@@ -23,7 +42,7 @@ export function App() {
   const sessions = useMemo(() => Object.values(sessionsById), [sessionsById]);
 
   const waitingForPermissionCount = useMemo(
-    () => sessions.reduce((count, session) => count + session.agents.filter((a) => a.state.lifecycle === "waiting_permission").length, 0),
+    () => sessions.reduce((count, session) => count + session.agents.filter((a) => a.displayState === "needs_permission").length, 0),
     [sessions]
   );
 
@@ -42,15 +61,26 @@ export function App() {
           <button className={`tab-button ${tab === "workshop" ? "active" : ""}`} onClick={() => setTab("workshop")}>
             Workshop
           </button>
+          <button className={`tab-button ${tab === "dashboard" ? "active" : ""}`} onClick={() => setTab("dashboard")}>
+            Dashboard
+          </button>
           <button className={`tab-button ${tab === "debug" ? "active" : ""}`} onClick={() => setTab("debug")}>
             Debug
           </button>
         </nav>
         <span className="spacer" />
+        <label className="debug-overlay-toggle">
+          <input type="checkbox" checked={debugOverlayEnabled} onChange={toggleDebugOverlay} />
+          State labels
+        </label>
         <ConnectionBadge status={status} />
       </header>
 
-      <main className="main-content">{tab === "workshop" ? <WorkshopView /> : <DebugView />}</main>
+      <main className="main-content">
+        {tab === "workshop" && <WorkshopView />}
+        {tab === "dashboard" && <DashboardView onOpenProject={openProjectInWorkshop} onOpenSession={openSessionInWorkshop} />}
+        {tab === "debug" && <DebugView />}
+      </main>
     </div>
   );
 }

@@ -27,9 +27,9 @@ function AgentNode({ agent }: { agent: SerializedAgent }) {
   return (
     <div className="agent-node">
       <div className="agent-node-header">
-        <span className={`lifecycle-${agent.state.lifecycle}`}>●</span>
+        <span className={`state-${agent.displayState}`}>●</span>
         <span>{agent.id === "main" ? "main" : (agent.agentType ?? agent.id)}</span>
-        <span className="muted">({agent.state.lifecycle})</span>
+        <span className="muted">({agent.displayState})</span>
         {agent.presence !== "active" && <span className="badge">{agent.presence}</span>}
       </div>
       {agent.taskDescription && <div className="agent-node-meta">{agent.taskDescription}</div>}

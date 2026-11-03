@@ -51,10 +51,10 @@ export function TeamCluster({
   const delegatingAgentIds = useMemo(() => {
     const ids = new Set<string>();
     for (const a of active) {
-      if (a.mood === "excited" && a.state.category === "delegate") ids.add(a.id);
+      if (a.mood === "excited" && a.activeToolCalls[0]?.category === "delegate") ids.add(a.id);
     }
     // Also mark agents whose foreman is in "excited" delegate state
-    if (main?.mood === "excited" && main.state.category === "delegate") {
+    if (main?.mood === "excited" && main.activeToolCalls[0]?.category === "delegate") {
       for (const a of active) ids.add(a.id);
     }
     return ids;

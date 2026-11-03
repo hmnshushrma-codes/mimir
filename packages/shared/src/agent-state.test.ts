@@ -7,93 +7,88 @@ function at(type: AgentEvent["type"], extra: Partial<AgentEvent> = {}): AgentEve
   return { type, at: T, ...extra } as AgentEvent;
 }
 
+function fresh(overrides: Partial<AgentState> = {}): AgentState {
+  return { ...createInitialAgentState(T), ...overrides };
+}
+
 describe("transitionAgent", () => {
-  it("starts in entering", () => {
+  it("starts with every flag clear", () => {
     const state = createInitialAgentState(T);
-    expect(state.lifecycle).toBe("entering");
+    expect(state).toEqual({ needsPermission: false, awaitingPrompt: false, done: false, leaving: false, lastError: null, updatedAt: T });
   });
 
-  it("entering -> working on TOOL_STARTED", () => {
-    const state = createInitialAgentState(T);
-    const next = transitionAgent(state, at("TOOL_STARTED", { category: "shell" }));
-    expect(next.lifecycle).toBe("working");
-    expect(next.category).toBe("shell");
+  it("TOOL_STARTED clears needsPermission, awaitingPrompt, and done", () => {
+    const state = fresh({ needsPermission: true, awaitingPrompt: true, done: true });
+    const next = transitionAgent(state, at("TOOL_STARTED"));
+    expect(next.needsPermission).toBe(false);
+    expect(next.awaitingPrompt).toBe(false);
+    expect(next.done).toBe(false);
   });
 
-  it("idle <-> working on tool start/success", () => {
-    let state: AgentState = { lifecycle: "idle", category: null, lastError: null, updatedAt: T };
-    state = transitionAgent(state, at("TOOL_STARTED", { category: "read" }));
-    expect(state.lifecycle).toBe("working");
-    expect(state.category).toBe("read");
-
-    state = transitionAgent(state, at("TOOL_SUCCEEDED"));
-    expect(state.lifecycle).toBe("idle");
-    expect(state.category).toBeNull();
-  });
-
-  it("working -> waiting_permission -> working on resolve", () => {
-    let state: AgentState = { lifecycle: "working", category: "shell", lastError: null, updatedAt: T };
+  it("PERMISSION_REQUIRED sets needsPermission; next TOOL_STARTED clears it", () => {
+    let state = fresh();
     state = transitionAgent(state, at("PERMISSION_REQUIRED"));
-    expect(state.lifecycle).toBe("waiting_permission");
+    expect(state.needsPermission).toBe(true);
 
-    state = transitionAgent(state, at("TOOL_STARTED", { category: "shell" }));
-    expect(state.lifecycle).toBe("working");
+    state = transitionAgent(state, at("TOOL_STARTED"));
+    expect(state.needsPermission).toBe(false);
   });
 
-  it("waiting_permission -> idle on PERMISSION_RESOLVED", () => {
-    const state: AgentState = { lifecycle: "waiting_permission", category: "shell", lastError: null, updatedAt: T };
-    const next = transitionAgent(state, at("PERMISSION_RESOLVED"));
-    expect(next.lifecycle).toBe("idle");
-  });
-
-  it("working -> error on TOOL_FAILED, and recovers on next tool start", () => {
-    let state: AgentState = { lifecycle: "working", category: "write", lastError: null, updatedAt: T };
+  it("TOOL_FAILED records the error; TOOL_SUCCEEDED clears it", () => {
+    let state = fresh();
     state = transitionAgent(state, at("TOOL_FAILED", { error: "boom" }));
-    expect(state.lifecycle).toBe("error");
     expect(state.lastError).toBe("boom");
 
-    state = transitionAgent(state, at("TOOL_STARTED", { category: "write" }));
-    expect(state.lifecycle).toBe("working");
+    state = transitionAgent(state, at("TOOL_SUCCEEDED"));
     expect(state.lastError).toBeNull();
   });
 
-  it("error -> idle on TOOL_SUCCEEDED", () => {
-    const state: AgentState = { lifecycle: "error", category: "write", lastError: "boom", updatedAt: T };
-    const next = transitionAgent(state, at("TOOL_SUCCEEDED"));
-    expect(next.lifecycle).toBe("idle");
+  it("AWAIT_PROMPT (Stop) sets awaitingPrompt", () => {
+    const next = transitionAgent(fresh(), at("AWAIT_PROMPT"));
+    expect(next.awaitingPrompt).toBe(true);
   });
 
-  it("any active state -> done on STOPPED", () => {
-    for (const lifecycle of ["entering", "idle", "working", "waiting_permission", "error"] as const) {
-      const state: AgentState = { lifecycle, category: null, lastError: null, updatedAt: T };
-      const next = transitionAgent(state, at("STOPPED"));
-      expect(next.lifecycle).toBe("done");
-    }
+  it("PROMPT_SUBMITTED (UserPromptSubmit) clears awaitingPrompt", () => {
+    const state = fresh({ awaitingPrompt: true });
+    const next = transitionAgent(state, at("PROMPT_SUBMITTED"));
+    expect(next.awaitingPrompt).toBe(false);
   });
 
-  it("done -> leaving on DEPART", () => {
-    const state: AgentState = { lifecycle: "done", category: null, lastError: null, updatedAt: T };
-    const next = transitionAgent(state, at("DEPART"));
-    expect(next.lifecycle).toBe("leaving");
+  it("DONE (SubagentStop/SessionEnd) sets done and clears awaitingPrompt", () => {
+    const state = fresh({ awaitingPrompt: true });
+    const next = transitionAgent(state, at("DONE"));
+    expect(next.done).toBe(true);
+    expect(next.awaitingPrompt).toBe(false);
+  });
+
+  it("DEPART only takes effect once done, setting leaving", () => {
+    const notDone = fresh();
+    expect(transitionAgent(notDone, at("DEPART")).leaving).toBe(false);
+
+    const done = fresh({ done: true });
+    expect(transitionAgent(done, at("DEPART")).leaving).toBe(true);
   });
 
   it("leaving is terminal to everything except SPAWNED (resume)", () => {
-    const state: AgentState = { lifecycle: "leaving", category: null, lastError: null, updatedAt: T };
-    expect(transitionAgent(state, at("TOOL_STARTED", { category: "shell" })).lifecycle).toBe("leaving");
-    expect(transitionAgent(state, at("DEPART")).lifecycle).toBe("leaving");
-    expect(transitionAgent(state, at("STOPPED")).lifecycle).toBe("leaving");
-    expect(transitionAgent(state, at("SPAWNED")).lifecycle).toBe("entering");
+    const state = fresh({ done: true, leaving: true });
+    expect(transitionAgent(state, at("TOOL_STARTED")).leaving).toBe(true);
+    expect(transitionAgent(state, at("DEPART")).leaving).toBe(true);
+    expect(transitionAgent(state, at("AWAIT_PROMPT")).leaving).toBe(true);
+    expect(transitionAgent(state, at("DONE")).leaving).toBe(true);
+
+    const resumed = transitionAgent(state, at("SPAWNED"));
+    expect(resumed).toEqual({ needsPermission: false, awaitingPrompt: false, done: false, leaving: false, lastError: null, updatedAt: T });
   });
 
-  it("done resumes to entering on SPAWNED (SendMessage waking a background subagent)", () => {
-    const state: AgentState = { lifecycle: "done", category: null, lastError: null, updatedAt: T };
+  it("SPAWNED resumes a done (non-leaving) agent to a fresh state", () => {
+    const state = fresh({ done: true });
     const next = transitionAgent(state, at("SPAWNED"));
-    expect(next.lifecycle).toBe("entering");
+    expect(next.done).toBe(false);
   });
 
-  it("ignores events that don't apply to the current lifecycle", () => {
-    const state: AgentState = { lifecycle: "idle", category: null, lastError: null, updatedAt: T };
-    expect(transitionAgent(state, at("PERMISSION_RESOLVED")).lifecycle).toBe("idle");
-    expect(transitionAgent(state, at("DEPART")).lifecycle).toBe("idle");
+  it("SPAWNED is a no-op for an agent that's neither done nor leaving", () => {
+    const state = fresh({ needsPermission: true });
+    const next = transitionAgent(state, at("SPAWNED"));
+    expect(next).toBe(state);
   });
 });

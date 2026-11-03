@@ -9,6 +9,8 @@ import { usePrefersDarkMode } from "../hooks/usePrefersDarkMode.js";
 import { useIsDaytime } from "../hooks/useTimeOfDay.js";
 import { getProfile, moodToState, type CharacterProfile } from "../characters/characterProfiles.js";
 import { AgentTooltip } from "./AgentTooltip.js";
+import { StateLabel } from "./StateLabel.js";
+import { useWorkshopStore } from "../store/useWorkshopStore.js";
 
 function roleLabel(agentId: string, agentType: string | null): string {
   const role = roleFor(agentId, agentType);
@@ -113,12 +115,13 @@ export function WorkerDesk({
   const [hovered, setHovered] = useState(false);
   const isDark = usePrefersDarkMode();
   const daytime = useIsDaytime();
+  const debugOverlayEnabled = useWorkshopStore((s) => s.debugOverlayEnabled);
   const visibility = classifyAgentVisibility(agent, nowMs);
   const finished = visibility === "finished";
 
   const hasActiveTool = agent.activeToolCalls.length > 0;
-  const charState = moodToState(agent.mood, false, hasActiveTool);
-  const profile = getProfile("agent", finished ? "sleeping" : charState);
+  const charState = moodToState(agent.mood, false, hasActiveTool, agent.state.leaving);
+  const profile = getProfile("agent", charState);
   const lampOn = (!daytime || !profile.lampDim) && !profile.lampDim;
 
   const deskColor = isDark ? "#332c24" : "#8e7050";
@@ -128,7 +131,7 @@ export function WorkerDesk({
   const activity = agent.activeToolCalls[0];
   const activityLabel = activity
     ? `${activity.toolName} \u00b7 ${activity.target ?? "\u2026"}`
-    : agent.state.lifecycle === "waiting_permission" ? "waiting for permission" : null;
+    : agent.displayState === "needs_permission" ? "waiting for permission" : null;
 
   return (
     <motion.div
@@ -144,12 +147,13 @@ export function WorkerDesk({
       tabIndex={0}
       data-agent-id={agent.id}
     >
+      {debugOverlayEnabled && <StateLabel state={agent.displayState} reason={agent.displayReason} />}
       <svg width="150" height="220" viewBox="0 0 150 220">
         {/* Layer 1: Character */}
         <g transform="translate(36,18) scale(0.6)">
           <Character
             agentId={agent.id} agentType={agent.agentType} sessionId={sessionId}
-            isForeman={false} mood={agent.mood} category={agent.state.category}
+            isForeman={false} mood={agent.mood} category={agent.activeToolCalls[0]?.category ?? null}
             reducedMotion={reducedMotion}
           />
         </g>

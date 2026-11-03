@@ -19,7 +19,7 @@ export type CharacterState =
 export type EyeState = "open" | "focused" | "half" | "closed" | "wide" | "squint";
 export type HeadPose = "still" | "tilt" | "at-monitor" | "at-viewer" | "down";
 export type HandState = "typing" | "holding-phone" | "resting" | "waving" | "on-head" | "on-chin" | "hidden";
-export type MonitorState = "off" | "dim" | "code-scrolling" | "cursor-blinking" | "error-text";
+export type MonitorState = "off" | "dim" | "code-scrolling" | "cursor-blinking" | "error-text" | "awaiting-prompt";
 
 export interface CharacterProfile {
   eyes: EyeState;
@@ -231,9 +231,9 @@ const AGENT_ERROR: CharacterProfile = {
 
 const AGENT_LEAVING: CharacterProfile = {
   eyes: "half",
-  headPose: "still",
+  headPose: "at-viewer",
   leftHand: "resting",
-  rightHand: "resting",
+  rightHand: "waving",
   showPhone: false,
   phonePosition: "hidden",
   showMug: false,
@@ -279,8 +279,14 @@ export function getProfile(role: "foreman" | "agent", state: CharacterState): Ch
 /**
  * Maps the existing mood (from the shared state machine) to a CharacterState.
  * This is the ONLY place that translates mood → visual state.
+ *
+ * `leaving` is checked first because it's a departure-animation flag
+ * (AgentState.leaving, driven by WorkshopModel.sweepDepartures), entirely
+ * separate from mood/display-state — nothing in the mood vocabulary
+ * distinguishes "departing" from any other state.
  */
-export function moodToState(mood: Mood, isForeman: boolean, hasActiveTool: boolean): CharacterState {
+export function moodToState(mood: Mood, isForeman: boolean, hasActiveTool: boolean, leaving?: boolean): CharacterState {
+  if (leaving) return "leaving";
   switch (mood) {
     case "worried":
       return "waiting";

@@ -21,7 +21,7 @@ describe("WorkshopModel.ingest", () => {
     expect(session.id).toBe("s1");
     expect(session.cwd).toBe("/repo");
     expect(agent.id).toBe(MAIN_AGENT_ID);
-    expect(agent.state.lifecycle).toBe("entering");
+    expect(agent.displayState).toBe("thinking");
   });
 
   it("tracks a tool call from PreToolUse through PostToolUse", () => {
@@ -34,7 +34,7 @@ describe("WorkshopModel.ingest", () => {
         "2026-01-01T00:00:00.000Z"
       )
     );
-    expect(agent.state.lifecycle).toBe("working");
+    expect(agent.displayState).toBe("working");
     expect(agent.activeToolCalls.get("tu1")?.status).toBe("running");
 
     const { agent: after } = model.ingest(
@@ -43,7 +43,8 @@ describe("WorkshopModel.ingest", () => {
         "2026-01-01T00:00:01.500Z"
       )
     );
-    expect(after.state.lifecycle).toBe("idle");
+    // The Part 1 fix: PostToolUse goes to "thinking", never "idle"/asleep.
+    expect(after.displayState).toBe("thinking");
     expect(after.activeToolCalls.has("tu1")).toBe(false);
     expect(after.finishedToolCalls).toHaveLength(1);
     expect(after.finishedToolCalls[0].status).toBe("succeeded");
@@ -153,6 +154,31 @@ describe("WorkshopModel.ingest", () => {
     model.sweepPresence("2026-01-01T00:02:00.000Z", 5_000, 60_000);
     expect(model.getSession("s1")?.agents.get(MAIN_AGENT_ID)?.presence).toBe("stale");
   });
+
+  it("sweepPresence keeps an agent active while it has a long-running tool call in flight", () => {
+    const model = new WorkshopModel();
+    model.ingest(envelope({ session_id: "s1", hook_event_name: "SessionStart", source: "startup" }, "2026-01-01T00:00:00.000Z"));
+    model.ingest(
+      envelope(
+        { session_id: "s1", hook_event_name: "PreToolUse", tool_name: "Monitor", tool_input: {}, tool_use_id: "tu-monitor" },
+        "2026-01-01T00:00:01.000Z"
+      )
+    );
+
+    // No PostToolUse yet — Monitor is still blocked waiting. Even well past
+    // both thresholds, the agent must not be marked idle/stale.
+    model.sweepPresence("2026-01-01T00:20:00.000Z", 5_000, 60_000);
+    expect(model.getSession("s1")?.agents.get(MAIN_AGENT_ID)?.presence).toBe("active");
+
+    model.ingest(
+      envelope(
+        { session_id: "s1", hook_event_name: "PostToolUse", tool_name: "Monitor", tool_input: {}, tool_output: "done", tool_use_id: "tu-monitor" },
+        "2026-01-01T00:20:01.000Z"
+      )
+    );
+    model.sweepPresence("2026-01-01T00:20:11.000Z", 5_000, 60_000);
+    expect(model.getSession("s1")?.agents.get(MAIN_AGENT_ID)?.presence).toBe("idle");
+  });
 });
 
 describe("WorkshopModel project linkage", () => {
@@ -254,6 +280,29 @@ describe("WorkshopModel session lifecycle", () => {
       envelope({ session_id: "s1", hook_event_name: "PreToolUse", tool_name: "Bash", tool_input: { command: "ls" }, tool_use_id: "tu1" }, "2026-01-01T00:00:11.000Z")
     );
     expect(model.getSession("s1")?.status).toBe("active");
+  });
+
+  it("keeps a session active while an agent has a long-running tool call blocked, past both thresholds", () => {
+    const model = new WorkshopModel();
+    model.ingest(envelope({ session_id: "s1", hook_event_name: "SessionStart", source: "startup" }, "2026-01-01T00:00:00.000Z"));
+    model.ingest(
+      envelope(
+        { session_id: "s1", hook_event_name: "PreToolUse", tool_name: "Monitor", tool_input: {}, tool_use_id: "tu-monitor" },
+        "2026-01-01T00:00:01.000Z"
+      )
+    );
+
+    model.sweepSessionStatus("2026-01-01T00:20:00.000Z", 5_000, 60_000);
+    expect(model.getSession("s1")?.status).toBe("active");
+
+    model.ingest(
+      envelope(
+        { session_id: "s1", hook_event_name: "PostToolUse", tool_name: "Monitor", tool_input: {}, tool_output: "done", tool_use_id: "tu-monitor" },
+        "2026-01-01T00:20:01.000Z"
+      )
+    );
+    model.sweepSessionStatus("2026-01-01T00:20:11.000Z", 5_000, 60_000);
+    expect(model.getSession("s1")?.status).toBe("idle");
   });
 });
 
@@ -382,8 +431,8 @@ describe("WorkshopModel cross-session isolation (critical)", () => {
   });
 });
 
-describe("WorkshopModel mood integration", () => {
-  it("sets mood from the lifecycle reached after each ingest", () => {
+describe("WorkshopModel display state + mood integration", () => {
+  it("sets mood from the display state reached after each ingest", () => {
     const model = new WorkshopModel();
     model.ingest(envelope({ session_id: "s1", hook_event_name: "SessionStart", source: "startup" }, "T0"));
 
@@ -392,11 +441,12 @@ describe("WorkshopModel mood integration", () => {
     );
     expect(working.agent.mood).toBe("focused");
 
-    const idle = model.ingest(
+    const afterSuccess = model.ingest(
       envelope({ session_id: "s1", hook_event_name: "PostToolUse", tool_name: "Bash", tool_input: { command: "ls" }, tool_output: "ok", tool_use_id: "tu1" }, "2026-01-01T00:00:01.000Z")
     );
-    // Foreman stays "focused" when idle (thinking between tool calls), never "sleepy"
-    expect(idle.agent.mood).toBe("focused");
+    // Thinking between tool calls stays "focused", never "sleepy" (the Part 1 fix).
+    expect(afterSuccess.agent.displayState).toBe("thinking");
+    expect(afterSuccess.agent.mood).toBe("focused");
   });
 
   it("a delegate tool call sets mood to excited", () => {
@@ -441,7 +491,7 @@ describe("WorkshopModel mood integration", () => {
     expect(nextFailure.agent.mood).toBe("dizzy");
   });
 
-  it("sweepMoods transitions working -> concentrating once a tool call has run long enough, with no new event", () => {
+  it("sweepDisplayStates transitions working -> concentrating once a tool call has run long enough, with no new event", () => {
     const model = new WorkshopModel(15_000);
     model.ingest(envelope({ session_id: "s1", hook_event_name: "SessionStart", source: "startup" }, "2026-01-01T00:00:00.000Z"));
     const { agent } = model.ingest(
@@ -452,12 +502,86 @@ describe("WorkshopModel mood integration", () => {
     );
     expect(agent.mood).toBe("focused");
 
-    const unchanged = model.sweepMoods("2026-01-01T00:00:05.000Z");
+    const unchanged = model.sweepDisplayStates("2026-01-01T00:00:05.000Z");
     expect(unchanged).toHaveLength(0);
     expect(model.getSession("s1")?.agents.get(MAIN_AGENT_ID)?.mood).toBe("focused");
 
-    const touched = model.sweepMoods("2026-01-01T00:00:20.000Z");
+    const touched = model.sweepDisplayStates("2026-01-01T00:00:20.000Z");
     expect(touched).toEqual([{ sessionId: "s1", agentId: MAIN_AGENT_ID }]);
-    expect(model.getSession("s1")?.agents.get(MAIN_AGENT_ID)?.mood).toBe("concentrating");
+    const after = model.getSession("s1")?.agents.get(MAIN_AGENT_ID);
+    expect(after?.displayState).toBe("working"); // still working — the tool call hasn't closed
+    expect(after?.mood).toBe("concentrating");
+  });
+
+  it("sweepDisplayStates transitions thinking -> stalled with no new event", () => {
+    const model = new WorkshopModel();
+    model.ingest(envelope({ session_id: "s1", hook_event_name: "SessionStart", source: "startup" }, "2026-01-01T00:00:00.000Z"));
+
+    const unchanged = model.sweepDisplayStates("2026-01-01T00:00:10.000Z");
+    expect(unchanged).toHaveLength(0); // still "thinking", nothing touched
+
+    const touched = model.sweepDisplayStates("2026-01-01T00:01:31.000Z"); // 91s later
+    expect(touched).toEqual([{ sessionId: "s1", agentId: MAIN_AGENT_ID }]);
+    expect(model.getSession("s1")?.agents.get(MAIN_AGENT_ID)?.displayState).toBe("stalled");
+  });
+});
+
+describe("WorkshopModel Stop / SubagentStop / UserPromptSubmit", () => {
+  it("Stop sends the foreman to awaiting_prompt, not done", () => {
+    const model = new WorkshopModel();
+    model.ingest(envelope({ session_id: "s1", hook_event_name: "SessionStart", source: "startup" }, "T0"));
+    const { agent } = model.ingest(envelope({ session_id: "s1", hook_event_name: "Stop" }, "T1"));
+    expect(agent.displayState).toBe("awaiting_prompt");
+    expect(agent.state.awaitingPrompt).toBe(true);
+    expect(agent.state.done).toBe(false);
+  });
+
+  it("SubagentStop sends a subagent to done, never awaiting_prompt", () => {
+    const model = new WorkshopModel();
+    model.ingest(envelope({ session_id: "s1", hook_event_name: "SessionStart", source: "startup" }, "T0"));
+    model.ingest(envelope({ session_id: "s1", hook_event_name: "SubagentStart", agent_id: "agent-1", agent_type: "Explore" }, "T1"));
+    const { agent } = model.ingest(
+      envelope({ session_id: "s1", hook_event_name: "SubagentStop", agent_id: "agent-1", agent_type: "Explore", exit_reason: "completed" }, "T2")
+    );
+    expect(agent.displayState).toBe("done");
+    expect(agent.state.done).toBe(true);
+    expect(agent.state.awaitingPrompt).toBe(false);
+  });
+
+  it("subagents never reach sleeping, no matter how long they sit done", () => {
+    const model = new WorkshopModel();
+    model.ingest(envelope({ session_id: "s1", hook_event_name: "SessionStart", source: "startup" }, "2026-01-01T00:00:00.000Z"));
+    model.ingest(
+      envelope({ session_id: "s1", hook_event_name: "SubagentStart", agent_id: "agent-1", agent_type: "Explore" }, "2026-01-01T00:00:01.000Z")
+    );
+    model.ingest(
+      envelope(
+        { session_id: "s1", hook_event_name: "SubagentStop", agent_id: "agent-1", agent_type: "Explore", exit_reason: "completed" },
+        "2026-01-01T00:00:02.000Z"
+      )
+    );
+    model.sweepDisplayStates("2026-01-01T01:00:00.000Z"); // an hour later
+    expect(model.getSession("s1")?.agents.get("agent-1")?.displayState).toBe("done");
+  });
+
+  it("UserPromptSubmit clears awaitingPrompt, bringing the foreman back to thinking", () => {
+    const model = new WorkshopModel();
+    model.ingest(envelope({ session_id: "s1", hook_event_name: "SessionStart", source: "startup" }, "T0"));
+    model.ingest(envelope({ session_id: "s1", hook_event_name: "Stop" }, "T1"));
+    const { agent } = model.ingest(envelope({ session_id: "s1", hook_event_name: "UserPromptSubmit", prompt: "do another thing" }, "T2"));
+    expect(agent.state.awaitingPrompt).toBe(false);
+    expect(agent.displayState).toBe("thinking");
+  });
+
+  it("a foreman left in awaiting_prompt for long enough falls asleep", () => {
+    const model = new WorkshopModel();
+    model.ingest(envelope({ session_id: "s1", hook_event_name: "SessionStart", source: "startup" }, "2026-01-01T00:00:00.000Z"));
+    model.ingest(envelope({ session_id: "s1", hook_event_name: "Stop" }, "2026-01-01T00:00:01.000Z"));
+
+    model.sweepDisplayStates("2026-01-01T00:01:00.000Z"); // 59s later — still awaiting_prompt
+    expect(model.getSession("s1")?.agents.get(MAIN_AGENT_ID)?.displayState).toBe("awaiting_prompt");
+
+    model.sweepDisplayStates("2026-01-01T00:05:02.000Z"); // past the 5-minute default
+    expect(model.getSession("s1")?.agents.get(MAIN_AGENT_ID)?.displayState).toBe("sleeping");
   });
 });

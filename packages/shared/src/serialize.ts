@@ -9,6 +9,8 @@ export interface SerializedAgent {
   taskDescription: string | null;
   state: AgentRecord["state"];
   presence: AgentRecord["presence"];
+  displayState: AgentRecord["displayState"];
+  displayReason: string;
   mood: AgentRecord["mood"];
   consecutiveErrors: number;
   lastEventAt: string;
@@ -46,6 +48,8 @@ export function serializeAgent(agent: AgentRecord): SerializedAgent {
     taskDescription: agent.taskDescription,
     state: agent.state,
     presence: agent.presence,
+    displayState: agent.displayState,
+    displayReason: agent.displayReason,
     mood: agent.mood,
     consecutiveErrors: agent.consecutiveErrors,
     lastEventAt: agent.lastEventAt,

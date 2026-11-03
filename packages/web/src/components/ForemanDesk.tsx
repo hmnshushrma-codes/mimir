@@ -3,8 +3,10 @@ import type { SerializedAgent, ActionCategory } from "@agent-workshop/shared";
 import { Character } from "../characters/Character.js";
 import { usePrefersDarkMode } from "../hooks/usePrefersDarkMode.js";
 import { useIsDaytime } from "../hooks/useTimeOfDay.js";
-import { getProfile, moodToState, type CharacterProfile } from "../characters/characterProfiles.js";
+import { getProfile, moodToState, type MonitorState } from "../characters/characterProfiles.js";
 import { AgentTooltip } from "./AgentTooltip.js";
+import { StateLabel } from "./StateLabel.js";
+import { useWorkshopStore } from "../store/useWorkshopStore.js";
 
 const INK = "#1b1d23";
 
@@ -22,14 +24,24 @@ function ToolIcon({ category }: { category: ActionCategory | null }) {
   }
 }
 
-function Monitor({ profile, teamColor, category, monitorBg }: { profile: CharacterProfile; teamColor: string; category: ActionCategory | null; monitorBg: string }) {
+function Monitor({
+  monitorState,
+  teamColor,
+  category,
+  monitorBg
+}: {
+  monitorState: MonitorState;
+  teamColor: string;
+  category: ActionCategory | null;
+  monitorBg: string;
+}) {
   return (
     <g>
       <rect x="70" y="100" width="60" height="44" rx="3" fill={monitorBg} stroke={INK} strokeWidth="1.5" />
       <rect x="96" y="144" width="8" height="5" fill="#555" />
       <rect x="88" y="148" width="24" height="3" rx="1.5" fill="#555" />
 
-      {profile.monitorState === "code-scrolling" && (
+      {monitorState === "code-scrolling" && (
         <g transform="translate(74,104)">
           <rect x="4" y="4" width="38" height="2" rx="1" fill={teamColor} opacity="0.7" />
           <rect x="8" y="8" width="28" height="2" rx="1" fill={teamColor} opacity="0.5" />
@@ -39,21 +51,37 @@ function Monitor({ profile, teamColor, category, monitorBg }: { profile: Charact
           <g transform="translate(32,18)"><ToolIcon category={category} /></g>
         </g>
       )}
-      {profile.monitorState === "cursor-blinking" && (
+      {monitorState === "cursor-blinking" && (
+        // A visible 3-dot "typing" indicator — the old 8x2px blinking rect
+        // was too small to read as anything at desk scale (Part 0 audit).
         <g transform="translate(74,104)">
-          <rect x="4" y="18" width="8" height="2" rx="1" fill={teamColor} opacity="0.5">
-            <animate attributeName="opacity" values="0.5;0.1;0.5" dur="1.2s" repeatCount="indefinite" />
+          {[0, 8, 16].map((cx, i) => (
+            <circle key={i} cx={cx + 12} cy="14" r="2.2" fill={teamColor} opacity="0.6">
+              <animate attributeName="opacity" values="0.6;0.15;0.6" dur="1.2s" begin={`${i * 0.2}s`} repeatCount="indefinite" />
+            </circle>
+          ))}
+        </g>
+      )}
+      {monitorState === "awaiting-prompt" && (
+        // A large blinking ">_" prompt cursor — distinct from "thinking" at a
+        // glance, since this is "waiting on you", not "working on something".
+        <g transform="translate(74,104)">
+          <text x="4" y="24" fontSize="16" fontFamily="monospace" fill={teamColor} opacity="0.8">
+            {">"}
+          </text>
+          <rect x="18" y="14" width="9" height="14" fill={teamColor} opacity="0.8">
+            <animate attributeName="opacity" values="0.8;0.1;0.8" dur="1s" repeatCount="indefinite" />
           </rect>
         </g>
       )}
-      {profile.monitorState === "error-text" && (
+      {monitorState === "error-text" && (
         <g transform="translate(74,104)">
           <rect x="4" y="10" width="40" height="2" rx="1" fill="#e34948" opacity="0.7" />
           <rect x="4" y="16" width="30" height="2" rx="1" fill="#e34948" opacity="0.5" />
           <rect x="4" y="22" width="20" height="2" rx="1" fill="#e34948" opacity="0.4" />
         </g>
       )}
-      {profile.monitorState === "dim" && (
+      {monitorState === "dim" && (
         <g transform="translate(74,104)">
           <rect x="4" y="18" width="6" height="2" rx="1" fill={teamColor} opacity="0.15" />
         </g>
@@ -119,11 +147,18 @@ export function ForemanDesk({
   const [hovered, setHovered] = useState(false);
   const isDark = usePrefersDarkMode();
   const daytime = useIsDaytime();
+  const debugOverlayEnabled = useWorkshopStore((s) => s.debugOverlayEnabled);
 
   const hasActiveTool = agent.activeToolCalls.length > 0;
-  const charState = moodToState(agent.mood, true, hasActiveTool);
+  const activeCategory = agent.activeToolCalls[0]?.category ?? null;
+  const charState = moodToState(agent.mood, true, hasActiveTool, agent.state.leaving);
   const profile = getProfile("foreman", charState);
   const lampOn = !daytime || !profile.lampDim;
+  // awaiting_prompt gets its own monitor look (">_" cursor) — distinct from
+  // mood/CharacterState, which currently can't tell it apart from plain
+  // thinking (both derive mood "focused"). Minimal, surgical override rather
+  // than reworking the whole mood pipeline for one visual distinction.
+  const monitorState = agent.displayState === "awaiting_prompt" ? "awaiting-prompt" : profile.monitorState;
 
   const deskColor = isDark ? "#3a3228" : "#9e7e5a";
   const deskTop = isDark ? "#4a4238" : "#b89870";
@@ -141,12 +176,13 @@ export function ForemanDesk({
       role="button"
       tabIndex={0}
     >
+      {debugOverlayEnabled && <StateLabel state={agent.displayState} reason={agent.displayReason} />}
       <svg width="200" height="280" viewBox="0 0 200 280">
         {/* Layer 1: Character (behind) */}
         <g transform="translate(48,30) scale(0.75)">
           <Character
             agentId={agent.id} agentType={agent.agentType} sessionId={sessionId}
-            isForeman mood={agent.mood} category={agent.state.category}
+            isForeman mood={agent.mood} category={activeCategory}
             reducedMotion={reducedMotion}
           />
         </g>
@@ -154,7 +190,7 @@ export function ForemanDesk({
         {/* Layer 2: Desk surface + monitor + props */}
         <rect x="16" y="148" width="168" height="10" rx="3" fill={deskTop} />
 
-        <Monitor profile={profile} teamColor={teamColor} category={agent.state.category} monitorBg={monitorBg} />
+        <Monitor monitorState={monitorState} teamColor={teamColor} category={activeCategory} monitorBg={monitorBg} />
         <DeskLamp on={lampOn} isDark={isDark} />
 
         {/* Phone in hand when idle */}

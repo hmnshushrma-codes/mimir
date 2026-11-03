@@ -3,6 +3,24 @@ import type { SerializedAgent, SerializedProject, SerializedSession, WorkshopEve
 
 export type ConnectionStatus = "connecting" | "live" | "disconnected" | "demo";
 
+const DEBUG_OVERLAY_STORAGE_KEY = "mimir:debug-overlay:v1";
+
+function loadDebugOverlayEnabled(): boolean {
+  try {
+    return localStorage.getItem(DEBUG_OVERLAY_STORAGE_KEY) === "true";
+  } catch {
+    return false;
+  }
+}
+
+function saveDebugOverlayEnabled(enabled: boolean): void {
+  try {
+    localStorage.setItem(DEBUG_OVERLAY_STORAGE_KEY, String(enabled));
+  } catch {
+    // ignore — e.g. localStorage unavailable
+  }
+}
+
 export interface TimelineEntry {
   id: number;
   event: WorkshopEvent;
@@ -16,6 +34,7 @@ interface WorkshopStoreState {
   projectFilter: string | null;
   focusedSessionId: string | null;
   timeline: TimelineEntry[];
+  debugOverlayEnabled: boolean;
   setStatus: (status: ConnectionStatus) => void;
   applySnapshot: (payload: { projects: SerializedProject[]; sessions: SerializedSession[] }) => void;
   applyEvent: (event: WorkshopEvent, project: SerializedProject, agent: SerializedAgent) => void;
@@ -24,6 +43,7 @@ interface WorkshopStoreState {
   setActiveSession: (sessionId: string) => void;
   setProjectFilter: (projectId: string | null) => void;
   setFocusedSession: (sessionId: string | null) => void;
+  toggleDebugOverlay: () => void;
   /** Merges replayed history (from GET /sessions/:id/events) into the
    *  timeline on connect, without touching agent/session state — the
    *  snapshot already carries the correct current state; this just backfills
@@ -48,6 +68,7 @@ export const useWorkshopStore = create<WorkshopStoreState>((set, get) => ({
   projectFilter: null,
   focusedSessionId: null,
   timeline: [],
+  debugOverlayEnabled: loadDebugOverlayEnabled(),
 
   setStatus: (status) => set({ status }),
 
@@ -99,6 +120,13 @@ export const useWorkshopStore = create<WorkshopStoreState>((set, get) => ({
   setActiveSession: (sessionId) => set({ activeSessionId: sessionId }),
   setProjectFilter: (projectId) => set({ projectFilter: projectId }),
   setFocusedSession: (sessionId) => set({ focusedSessionId: sessionId }),
+
+  toggleDebugOverlay: () =>
+    set((state) => {
+      const next = !state.debugOverlayEnabled;
+      saveDebugOverlayEnabled(next);
+      return { debugOverlayEnabled: next };
+    }),
 
   backfillTimeline: (events) => {
     if (events.length === 0) return;

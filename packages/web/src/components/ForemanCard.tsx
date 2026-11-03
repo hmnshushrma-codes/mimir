@@ -36,7 +36,7 @@ export function ForemanCard({
         sessionId={sessionId}
         isForeman
         mood={agent.mood}
-        category={agent.state.category}
+        category={agent.activeToolCalls[0]?.category ?? null}
         scale={1.1}
         reducedMotion={reducedMotion}
       />

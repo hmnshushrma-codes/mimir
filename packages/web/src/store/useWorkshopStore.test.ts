@@ -10,8 +10,10 @@ function agent(overrides: Partial<SerializedAgent> = {}): SerializedAgent {
     correlation: null,
     agentType: null,
     taskDescription: null,
-    state: { lifecycle: "idle", category: null, lastError: null, updatedAt: "T0" },
+    state: { needsPermission: false, awaitingPrompt: false, done: false, leaving: false, lastError: null, updatedAt: "T0" },
     presence: "active",
+    displayState: "thinking",
+    displayReason: "",
     mood: "sleepy",
     consecutiveErrors: 0,
     lastEventAt: "T0",
@@ -72,7 +74,8 @@ describe("useWorkshopStore", () => {
       activeSessionId: null,
       projectFilter: null,
       focusedSessionId: null,
-      timeline: []
+      timeline: [],
+      debugOverlayEnabled: false
     });
   });
 
@@ -95,16 +98,12 @@ describe("useWorkshopStore", () => {
   });
 
   it("applyEvent upserts an agent by id rather than duplicating it", () => {
-    useWorkshopStore
-      .getState()
-      .applyEvent(event(), project(), agent({ state: { lifecycle: "working", category: "shell", lastError: null, updatedAt: "T0" } }));
-    useWorkshopStore
-      .getState()
-      .applyEvent(event({ timestamp: "T1" }), project(), agent({ state: { lifecycle: "idle", category: null, lastError: null, updatedAt: "T1" } }));
+    useWorkshopStore.getState().applyEvent(event(), project(), agent({ displayState: "working" }));
+    useWorkshopStore.getState().applyEvent(event({ timestamp: "T1" }), project(), agent({ displayState: "thinking" }));
 
     const state = useWorkshopStore.getState();
     expect(state.sessions.s1.agents).toHaveLength(1);
-    expect(state.sessions.s1.agents[0].state.lifecycle).toBe("idle");
+    expect(state.sessions.s1.agents[0].displayState).toBe("thinking");
     expect(state.timeline).toHaveLength(2);
   });
 

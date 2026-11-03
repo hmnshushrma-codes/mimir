@@ -54,11 +54,11 @@ export function DeskArea({
 
   const delegatingAgentIds = useMemo(() => {
     const ids = new Set<string>();
-    if (main?.mood === "excited" && main.state.category === "delegate") {
+    if (main?.mood === "excited" && main.activeToolCalls[0]?.category === "delegate") {
       for (const a of active) ids.add(a.id);
     }
     for (const a of active) {
-      if (a.mood === "excited" && a.state.category === "delegate") ids.add(a.id);
+      if (a.mood === "excited" && a.activeToolCalls[0]?.category === "delegate") ids.add(a.id);
     }
     return ids;
   }, [active, main]);
