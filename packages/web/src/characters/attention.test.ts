@@ -1,41 +1,47 @@
 import { describe, expect, it } from "vitest";
-import { sortByAttention, worstMoodRank } from "./attention.js";
+import { sortByAttention, worstStateRank } from "./attention.js";
 
-describe("worstMoodRank", () => {
-  it("worried outranks everything", () => {
-    expect(worstMoodRank(["focused", "worried", "sleepy"])).toBeLessThan(worstMoodRank(["focused", "sleepy"]));
+describe("worstStateRank", () => {
+  it("needs_permission outranks everything", () => {
+    expect(worstStateRank(["thinking", "needs_permission", "sleeping"])).toBeLessThan(
+      worstStateRank(["thinking", "sleeping"])
+    );
   });
 
-  it("error moods outrank working moods", () => {
-    expect(worstMoodRank(["dizzy"])).toBeLessThan(worstMoodRank(["focused"]));
-    expect(worstMoodRank(["frustrated"])).toBeLessThan(worstMoodRank(["concentrating"]));
+  it("error outranks working", () => {
+    expect(worstStateRank(["error"])).toBeLessThan(worstStateRank(["working"]));
   });
 
-  it("working moods outrank idle", () => {
-    expect(worstMoodRank(["focused"])).toBeLessThan(worstMoodRank(["sleepy"]));
+  it("working outranks idle states", () => {
+    expect(worstStateRank(["working"])).toBeLessThan(worstStateRank(["sleeping"]));
   });
 
   it("an empty list ranks lowest (least urgent)", () => {
-    expect(worstMoodRank([])).toBeGreaterThan(worstMoodRank(["sleepy"]));
+    expect(worstStateRank([])).toBeGreaterThan(worstStateRank(["sleeping"]));
   });
 });
 
 describe("sortByAttention", () => {
-  it("orders waiting_permission -> error -> working -> idle", () => {
+  it("orders needs_permission -> error -> working -> idle", () => {
     const sessions = [
-      { id: "idle-session", moods: ["sleepy" as const] },
-      { id: "worried-session", moods: ["sleepy" as const, "worried" as const] },
-      { id: "working-session", moods: ["focused" as const] },
-      { id: "error-session", moods: ["dizzy" as const] }
+      { id: "idle-session", states: ["sleeping" as const] },
+      { id: "permission-session", states: ["sleeping" as const, "needs_permission" as const] },
+      { id: "working-session", states: ["working" as const] },
+      { id: "error-session", states: ["error" as const] }
     ];
-    const sorted = sortByAttention(sessions, (s) => s.moods);
-    expect(sorted.map((s) => s.id)).toEqual(["worried-session", "error-session", "working-session", "idle-session"]);
+    const sorted = sortByAttention(sessions, (s) => s.states);
+    expect(sorted.map((s) => s.id)).toEqual([
+      "permission-session",
+      "error-session",
+      "working-session",
+      "idle-session"
+    ]);
   });
 
   it("does not mutate the input array", () => {
-    const sessions = [{ id: "a", moods: ["sleepy" as const] }, { id: "b", moods: ["worried" as const] }];
+    const sessions = [{ id: "a", states: ["sleeping" as const] }, { id: "b", states: ["needs_permission" as const] }];
     const copy = [...sessions];
-    sortByAttention(sessions, (s) => s.moods);
+    sortByAttention(sessions, (s) => s.states);
     expect(sessions).toEqual(copy);
   });
 });

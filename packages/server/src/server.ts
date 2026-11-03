@@ -96,7 +96,7 @@ function rehydrateModel(model: WorkshopModel, db: DatabaseSync): number {
 export function buildApp({
   config,
   db,
-  model = new WorkshopModel(config.longToolCallMs, {
+  model = new WorkshopModel({
     stalledAfterMs: config.stalledAfterMs,
     sleepAfterMs: config.sleepAfterMs,
     needsInputTools: config.needsInputTools

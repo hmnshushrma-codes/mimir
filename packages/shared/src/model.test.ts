@@ -431,43 +431,8 @@ describe("WorkshopModel cross-session isolation (critical)", () => {
   });
 });
 
-describe("WorkshopModel display state + mood integration", () => {
-  it("sets mood from the display state reached after each ingest", () => {
-    const model = new WorkshopModel();
-    model.ingest(envelope({ session_id: "s1", hook_event_name: "SessionStart", source: "startup" }, "T0"));
-
-    const working = model.ingest(
-      envelope({ session_id: "s1", hook_event_name: "PreToolUse", tool_name: "Bash", tool_input: { command: "ls" }, tool_use_id: "tu1" }, "2026-01-01T00:00:00.000Z")
-    );
-    expect(working.agent.mood).toBe("focused");
-
-    const afterSuccess = model.ingest(
-      envelope({ session_id: "s1", hook_event_name: "PostToolUse", tool_name: "Bash", tool_input: { command: "ls" }, tool_output: "ok", tool_use_id: "tu1" }, "2026-01-01T00:00:01.000Z")
-    );
-    // Thinking between tool calls stays "focused", never "sleepy" (the Part 1 fix).
-    expect(afterSuccess.agent.displayState).toBe("thinking");
-    expect(afterSuccess.agent.mood).toBe("focused");
-  });
-
-  it("a delegate tool call sets mood to excited", () => {
-    const model = new WorkshopModel();
-    model.ingest(envelope({ session_id: "s1", hook_event_name: "SessionStart", source: "startup" }, "T0"));
-    const { agent } = model.ingest(
-      envelope({ session_id: "s1", hook_event_name: "PreToolUse", tool_name: "Agent", tool_input: {}, tool_use_id: "tu1" }, "T1")
-    );
-    expect(agent.mood).toBe("excited");
-  });
-
-  it("waiting_permission sets mood to worried", () => {
-    const model = new WorkshopModel();
-    model.ingest(envelope({ session_id: "s1", hook_event_name: "SessionStart", source: "startup" }, "T0"));
-    const { agent } = model.ingest(
-      envelope({ session_id: "s1", hook_event_name: "Notification", notification_type: "permission_prompt", message: "..." }, "T1")
-    );
-    expect(agent.mood).toBe("worried");
-  });
-
-  it("escalates from dizzy to frustrated after 3 consecutive tool failures, and resets on success", () => {
+describe("WorkshopModel display state integration", () => {
+  it("escalates consecutiveErrors across repeated failures, and resets on success", () => {
     const model = new WorkshopModel();
     model.ingest(envelope({ session_id: "s1", hook_event_name: "SessionStart", source: "startup" }, "T0"));
 
@@ -477,10 +442,9 @@ describe("WorkshopModel display state + mood integration", () => {
       );
     }
 
-    expect(fail("tu1", "T1").agent.mood).toBe("dizzy");
-    expect(fail("tu2", "T2").agent.mood).toBe("dizzy");
-    expect(fail("tu3", "T3").agent.mood).toBe("frustrated");
-    expect(model.getSession("s1")?.agents.get(MAIN_AGENT_ID)?.consecutiveErrors).toBe(3);
+    expect(fail("tu1", "T1").agent.displayState).toBe("error");
+    expect(fail("tu2", "T2").agent.consecutiveErrors).toBe(2);
+    expect(fail("tu3", "T3").agent.consecutiveErrors).toBe(3);
 
     const recovered = model.ingest(
       envelope({ session_id: "s1", hook_event_name: "PostToolUse", tool_name: "Bash", tool_input: {}, tool_output: "ok", tool_use_id: "tu4" }, "T4")
@@ -488,29 +452,7 @@ describe("WorkshopModel display state + mood integration", () => {
     expect(recovered.agent.consecutiveErrors).toBe(0);
 
     const nextFailure = fail("tu5", "T5");
-    expect(nextFailure.agent.mood).toBe("dizzy");
-  });
-
-  it("sweepDisplayStates transitions working -> concentrating once a tool call has run long enough, with no new event", () => {
-    const model = new WorkshopModel(15_000);
-    model.ingest(envelope({ session_id: "s1", hook_event_name: "SessionStart", source: "startup" }, "2026-01-01T00:00:00.000Z"));
-    const { agent } = model.ingest(
-      envelope(
-        { session_id: "s1", hook_event_name: "PreToolUse", tool_name: "Bash", tool_input: { command: "sleep 30" }, tool_use_id: "tu1" },
-        "2026-01-01T00:00:00.000Z"
-      )
-    );
-    expect(agent.mood).toBe("focused");
-
-    const unchanged = model.sweepDisplayStates("2026-01-01T00:00:05.000Z");
-    expect(unchanged).toHaveLength(0);
-    expect(model.getSession("s1")?.agents.get(MAIN_AGENT_ID)?.mood).toBe("focused");
-
-    const touched = model.sweepDisplayStates("2026-01-01T00:00:20.000Z");
-    expect(touched).toEqual([{ sessionId: "s1", agentId: MAIN_AGENT_ID }]);
-    const after = model.getSession("s1")?.agents.get(MAIN_AGENT_ID);
-    expect(after?.displayState).toBe("working"); // still working — the tool call hasn't closed
-    expect(after?.mood).toBe("concentrating");
+    expect(nextFailure.agent.consecutiveErrors).toBe(1);
   });
 
   it("sweepDisplayStates transitions thinking -> stalled with no new event", () => {

@@ -45,13 +45,23 @@ export type EffectName =
 
 export interface PropsConfig {
   showMonitor: boolean;
-  monitorContent: "off" | "code" | "book-page" | "done-check" | "dim";
+  /** "awaiting-prompt" is the foreman-only ">_" cursor look — distinct from
+   *  plain "dim" idle, since DisplayState now makes that distinction cheap
+   *  to own here instead of a component peeking at raw state. */
+  monitorContent: "off" | "code" | "book-page" | "done-check" | "dim" | "awaiting-prompt";
   showKeyboard: boolean;
   keyboardActive: boolean;
   showMug: boolean;
   showBook: boolean;
   showRadio: boolean;
   signs: { yes: boolean; no: boolean } | null;
+  /** Foreman-only, "idle holding phone" look (awaiting_prompt / sleeping). */
+  showPhone: boolean;
+  phonePosition: "in-hand" | "on-desk" | "hidden";
+  /** True = this agent dims their own lamp (world day/night still applies on
+   *  top — see ForemanDesk/WorkerDesk's lampOn derivation). Only true for a
+   *  resting subagent (sleeping); never for the foreman. */
+  lampDim: boolean;
 }
 
 export interface GestureState {

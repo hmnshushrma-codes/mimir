@@ -54,6 +54,12 @@ function Monitor({ content, teamColor }: { content: PropsConfig["monitorContent"
         </g>
       )}
       {content === "dim" && <rect x={4} y={14} width={6} height={2} rx={1} fill={teamColor} opacity={0.15} />}
+      {content === "awaiting-prompt" && (
+        <g transform="translate(4,4)">
+          <text x={0} y={22} fontSize={14} fontFamily="monospace" fill={teamColor} opacity={0.8}>{">"}</text>
+          <rect x={10} y={12} width={7} height={12} fill={teamColor} opacity={0.8} />
+        </g>
+      )}
     </g>
   );
 }
@@ -92,6 +98,15 @@ function Book() {
     <g transform="translate(40,20) rotate(-6)">
       <path d="M-14 0 Q0 -5 14 0 L14 18 Q0 13 -14 18 Z" fill="#fff" stroke={INK} strokeWidth={1} />
       <line x1={0} y1={0} x2={0} y2={18} stroke={INK} strokeWidth={0.8} opacity={0.5} />
+    </g>
+  );
+}
+
+function Phone() {
+  return (
+    <g transform="translate(26,108) rotate(-10)">
+      <rect x={0} y={0} width={14} height={22} rx={2.5} fill="#1a1a1a" stroke="#333" strokeWidth={0.8} />
+      <rect x={2} y={2.5} width={10} height={15} rx={1.2} fill="#3a6da8" opacity={0.6} />
     </g>
   );
 }
@@ -142,6 +157,7 @@ export function Props({ props, pose, teamColor }: { props: PropsConfig; pose: Po
       {props.showMug && <Mug />}
       {props.showBook && <Book />}
       {props.showRadio && <Radio />}
+      {props.showPhone && props.phonePosition === "in-hand" && <Phone />}
       {props.signs && <Signs yes={props.signs.yes} no={props.signs.no} />}
     </g>
   );

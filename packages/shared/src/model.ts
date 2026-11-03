@@ -3,7 +3,6 @@ import { MAIN_AGENT_ID, normalizeToWorkshopEvent, deriveAgentEvent, type Worksho
 import type { HookEventEnvelope } from "./raw-hook-events.js";
 import type { ActionCategory } from "./categories.js";
 import { fallbackProjectInfo, type ProjectInfo } from "./project.js";
-import { deriveMood, DEFAULT_LONG_TOOL_CALL_MS, type Mood } from "./mood.js";
 import { deriveDisplayState, DEFAULT_DISPLAY_STATE_CONFIG, type DisplayState, type DisplayStateConfig } from "./display-state.js";
 
 export type CorrelationConfidence = "confirmed" | "heuristic" | null;
@@ -32,9 +31,8 @@ export interface AgentRecord {
   presence: Presence;
   displayState: DisplayState;
   displayReason: string;
-  mood: Mood;
   /** Consecutive PostToolUseFailure events with no success in between —
-   *  drives the dizzy -> frustrated mood escalation. */
+   *  drives needs/error severity in behaviourFor (packages/web/src/rig). */
   consecutiveErrors: number;
   lastEventAt: string;
   activeToolCalls: Map<string, ToolCallRecord>;
@@ -88,10 +86,7 @@ export class WorkshopModel {
    *  resolve a parent after the heuristic has already claimed it. */
   private delegateCallsByToolUseId = new Map<string, Map<string, PendingDelegate>>();
 
-  constructor(
-    private readonly longToolCallMs: number = DEFAULT_LONG_TOOL_CALL_MS,
-    private readonly displayStateConfig: DisplayStateConfig = DEFAULT_DISPLAY_STATE_CONFIG
-  ) {}
+  constructor(private readonly displayStateConfig: DisplayStateConfig = DEFAULT_DISPLAY_STATE_CONFIG) {}
 
   /**
    * @param projectInfo Pre-resolved project identity for this event's cwd.
@@ -129,17 +124,8 @@ export class WorkshopModel {
     }
 
     this.recomputeDisplayState(agent, workshopEvent.timestamp);
-    this.recomputeMood(agent, workshopEvent.timestamp);
 
     return { workshopEvent, project, session, agent };
-  }
-
-  private earliestActiveToolCall(agent: AgentRecord): ToolCallRecord | null {
-    let earliest: ToolCallRecord | null = null;
-    for (const call of agent.activeToolCalls.values()) {
-      if (earliest === null || call.startedAt < earliest.startedAt) earliest = call;
-    }
-    return earliest;
   }
 
   /** `done`/`leaving` agents don't count as "still active" for the purposes
@@ -177,20 +163,6 @@ export class WorkshopModel {
     );
     agent.displayState = result.state;
     agent.displayReason = result.reason;
-  }
-
-  private recomputeMood(agent: AgentRecord, nowIso: string): void {
-    const earliestCall = this.earliestActiveToolCall(agent);
-    agent.mood = deriveMood(
-      {
-        state: agent.displayState,
-        category: earliestCall?.category ?? null,
-        activeToolCallStartedAt: earliestCall?.startedAt ?? null,
-        consecutiveErrors: agent.consecutiveErrors,
-        nowIso
-      },
-      this.longToolCallMs
-    );
   }
 
   private getOrCreateProject(info: ProjectInfo, nowIso: string): ProjectRecord {
@@ -246,7 +218,6 @@ export class WorkshopModel {
         presence: "active",
         displayState: "thinking",
         displayReason: "",
-        mood: "neutral",
         consecutiveErrors: 0,
         lastEventAt: event.timestamp,
         activeToolCalls: new Map(),
@@ -413,20 +384,17 @@ export class WorkshopModel {
     return touched;
   }
 
-  /** Display state (and the mood derived from it) can change purely from
-   *  elapsed time — thinking -> stalled, awaiting_prompt -> sleeping, a long
-   *  tool call crossing the "concentrating" threshold — with no new event to
-   *  trigger ingest()'s own recompute calls. This sweep covers that case.
-   *  Returns the agents whose display state or mood actually changed. */
+  /** Display state can change purely from elapsed time — thinking -> stalled,
+   *  awaiting_prompt -> sleeping — with no new event to trigger ingest()'s
+   *  own recompute. This sweep covers that case. Returns the agents whose
+   *  display state actually changed. */
   sweepDisplayStates(nowIso: string): Array<{ sessionId: string; agentId: string }> {
     const touched: Array<{ sessionId: string; agentId: string }> = [];
     for (const session of this.sessions.values()) {
       for (const agent of session.agents.values()) {
         const previousState = agent.displayState;
-        const previousMood = agent.mood;
         this.recomputeDisplayState(agent, nowIso);
-        this.recomputeMood(agent, nowIso);
-        if (agent.displayState !== previousState || agent.mood !== previousMood) {
+        if (agent.displayState !== previousState) {
           touched.push({ sessionId: session.id, agentId: agent.id });
         }
       }

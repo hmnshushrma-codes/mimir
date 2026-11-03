@@ -1,9 +1,12 @@
 import { useState } from "react";
 import type { SerializedAgent, ActionCategory } from "@agent-workshop/shared";
-import { Character } from "../characters/Character.js";
+import { RiggedCharacter } from "../rig/RiggedCharacter.js";
+import { useStableBehaviour } from "../rig/useStableBehaviour.js";
+import { buildBehaviourContext } from "../rig/agentBehaviourContext.js";
+import { contrastCapColor } from "../characters/colorUtils.js";
+import type { PropsConfig } from "../rig/types.js";
 import { usePrefersDarkMode } from "../hooks/usePrefersDarkMode.js";
 import { useIsDaytime } from "../hooks/useTimeOfDay.js";
-import { getProfile, moodToState, type MonitorState } from "../characters/characterProfiles.js";
 import { AgentTooltip } from "./AgentTooltip.js";
 import { StateLabel } from "./StateLabel.js";
 import { useWorkshopStore } from "../store/useWorkshopStore.js";
@@ -25,12 +28,12 @@ function ToolIcon({ category }: { category: ActionCategory | null }) {
 }
 
 function Monitor({
-  monitorState,
+  monitorContent,
   teamColor,
   category,
   monitorBg
 }: {
-  monitorState: MonitorState;
+  monitorContent: PropsConfig["monitorContent"];
   teamColor: string;
   category: ActionCategory | null;
   monitorBg: string;
@@ -41,7 +44,7 @@ function Monitor({
       <rect x="96" y="144" width="8" height="5" fill="#555" />
       <rect x="88" y="148" width="24" height="3" rx="1.5" fill="#555" />
 
-      {monitorState === "code-scrolling" && (
+      {monitorContent === "code" && (
         <g transform="translate(74,104)">
           <rect x="4" y="4" width="38" height="2" rx="1" fill={teamColor} opacity="0.7" />
           <rect x="8" y="8" width="28" height="2" rx="1" fill={teamColor} opacity="0.5" />
@@ -51,18 +54,12 @@ function Monitor({
           <g transform="translate(32,18)"><ToolIcon category={category} /></g>
         </g>
       )}
-      {monitorState === "cursor-blinking" && (
-        // A visible 3-dot "typing" indicator — the old 8x2px blinking rect
-        // was too small to read as anything at desk scale (Part 0 audit).
+      {monitorContent === "book-page" && (
         <g transform="translate(74,104)">
-          {[0, 8, 16].map((cx, i) => (
-            <circle key={i} cx={cx + 12} cy="14" r="2.2" fill={teamColor} opacity="0.6">
-              <animate attributeName="opacity" values="0.6;0.15;0.6" dur="1.2s" begin={`${i * 0.2}s`} repeatCount="indefinite" />
-            </circle>
-          ))}
+          <rect x="4" y="2" width="38" height="24" rx="1" fill="#fff" opacity="0.1" />
         </g>
       )}
-      {monitorState === "awaiting-prompt" && (
+      {monitorContent === "awaiting-prompt" && (
         // A large blinking ">_" prompt cursor — distinct from "thinking" at a
         // glance, since this is "waiting on you", not "working on something".
         <g transform="translate(74,104)">
@@ -74,14 +71,13 @@ function Monitor({
           </rect>
         </g>
       )}
-      {monitorState === "error-text" && (
-        <g transform="translate(74,104)">
-          <rect x="4" y="10" width="40" height="2" rx="1" fill="#e34948" opacity="0.7" />
-          <rect x="4" y="16" width="30" height="2" rx="1" fill="#e34948" opacity="0.5" />
-          <rect x="4" y="22" width="20" height="2" rx="1" fill="#e34948" opacity="0.4" />
+      {monitorContent === "done-check" && (
+        <g transform="translate(100,122)">
+          <circle r="11" fill={teamColor} opacity="0.25" />
+          <path d="M-5 0 L-1 5 L6 -6" stroke={teamColor} strokeWidth="2.5" fill="none" strokeLinecap="round" strokeLinejoin="round" />
         </g>
       )}
-      {monitorState === "dim" && (
+      {monitorContent === "dim" && (
         <g transform="translate(74,104)">
           <rect x="4" y="18" width="6" height="2" rx="1" fill={teamColor} opacity="0.15" />
         </g>
@@ -127,9 +123,27 @@ function PhoneInHand({ teamColor }: { teamColor: string }) {
   );
 }
 
+function Signs({ yes, no }: { yes: boolean; no: boolean }) {
+  return (
+    <g transform="translate(48, 90)">
+      {yes && (
+        <g>
+          <rect x="0" y="0" width="30" height="20" rx="2" fill="#1baf7a" stroke="#fff" strokeWidth="1" />
+          <text x="15" y="14" textAnchor="middle" fontSize="11" fontWeight="700" fill="#fff">YES</text>
+        </g>
+      )}
+      {no && (
+        <g transform="translate(74,0)">
+          <rect x="0" y="0" width="30" height="20" rx="2" fill="#e34948" stroke="#fff" strokeWidth="1" />
+          <text x="15" y="14" textAnchor="middle" fontSize="11" fontWeight="700" fill="#fff">NO</text>
+        </g>
+      )}
+    </g>
+  );
+}
+
 export interface ForemanDeskProps {
   agent: SerializedAgent;
-  sessionId: string;
   teamColor: string;
   projectName: string;
   branch: string | null;
@@ -141,31 +155,26 @@ export interface ForemanDeskProps {
 }
 
 export function ForemanDesk({
-  agent, sessionId, teamColor, projectName, branch, latestPrompt, nowMs,
+  agent, teamColor, projectName, branch, latestPrompt, nowMs,
   selected, onSelect, reducedMotion
 }: ForemanDeskProps) {
   const [hovered, setHovered] = useState(false);
   const isDark = usePrefersDarkMode();
   const daytime = useIsDaytime();
   const debugOverlayEnabled = useWorkshopStore((s) => s.debugOverlayEnabled);
+  const capColor = contrastCapColor(teamColor);
 
-  const hasActiveTool = agent.activeToolCalls.length > 0;
-  const activeCategory = agent.activeToolCalls[0]?.category ?? null;
-  const charState = moodToState(agent.mood, true, hasActiveTool, agent.state.leaving);
-  const profile = getProfile("foreman", charState);
-  const lampOn = !daytime || !profile.lampDim;
-  // awaiting_prompt gets its own monitor look (">_" cursor) — distinct from
-  // mood/CharacterState, which currently can't tell it apart from plain
-  // thinking (both derive mood "focused"). Minimal, surgical override rather
-  // than reworking the whole mood pipeline for one visual distinction.
-  const monitorState = agent.displayState === "awaiting_prompt" ? "awaiting-prompt" : profile.monitorState;
+  const behaviourContext = buildBehaviourContext(agent, { isForeman: true, teamColor, capColor, nowMs });
+  const behaviour = useStableBehaviour(behaviourContext);
+  const activeCategory = behaviourContext.category;
+  const lampOn = !daytime || !behaviour.props.lampDim;
 
   const deskColor = isDark ? "#3a3228" : "#9e7e5a";
   const deskTop = isDark ? "#4a4238" : "#b89870";
   const monitorBg = isDark ? "#111318" : "#1a1d24";
   const nameplateColor = isDark ? "#c9a84c" : "#d4a843";
-  const nameLabel = projectName.length > 18 ? projectName.slice(0, 17) + "\u2026" : projectName;
-  const branchLabel = branch ? (branch.length > 14 ? branch.slice(0, 13) + "\u2026" : branch) : null;
+  const nameLabel = projectName.length > 18 ? projectName.slice(0, 17) + "…" : projectName;
+  const branchLabel = branch ? (branch.length > 14 ? branch.slice(0, 13) + "…" : branch) : null;
 
   return (
     <div
@@ -180,9 +189,11 @@ export function ForemanDesk({
       <svg width="200" height="280" viewBox="0 0 200 280">
         {/* Layer 1: Character (behind) */}
         <g transform="translate(48,30) scale(0.75)">
-          <Character
-            agentId={agent.id} agentType={agent.agentType} sessionId={sessionId}
-            isForeman mood={agent.mood} category={activeCategory}
+          <RiggedCharacter
+            behaviour={behaviour}
+            behaviourContext={behaviourContext}
+            agentId={agent.id}
+            renderProps={false}
             reducedMotion={reducedMotion}
           />
         </g>
@@ -190,16 +201,19 @@ export function ForemanDesk({
         {/* Layer 2: Desk surface + monitor + props */}
         <rect x="16" y="148" width="168" height="10" rx="3" fill={deskTop} />
 
-        <Monitor monitorState={monitorState} teamColor={teamColor} category={activeCategory} monitorBg={monitorBg} />
+        <Monitor monitorContent={behaviour.props.monitorContent} teamColor={teamColor} category={activeCategory} monitorBg={monitorBg} />
         <DeskLamp on={lampOn} isDark={isDark} />
 
         {/* Phone in hand when idle */}
-        {profile.showPhone && profile.phonePosition === "in-hand" && (
+        {behaviour.props.showPhone && behaviour.props.phonePosition === "in-hand" && (
           <PhoneInHand teamColor={teamColor} />
         )}
 
+        {/* YES/NO permission signs */}
+        {behaviour.props.signs && <Signs yes={behaviour.props.signs.yes} no={behaviour.props.signs.no} />}
+
         {/* Coffee mug */}
-        {profile.showMug && (
+        {behaviour.props.showMug && (
           <g transform="translate(24, 136)">
             <rect x="0" y="0" width="10" height="12" rx="2" fill={isDark ? "#c06030" : "#e07040"} />
             <rect x="10" y="3" width="5" height="4" rx="2" fill={isDark ? "#c06030" : "#e07040"} />
@@ -209,8 +223,9 @@ export function ForemanDesk({
         {/* Keyboard */}
         <rect x="78" y="152" width="44" height="5" rx="2" fill="#555" opacity="0.6" />
 
-        {/* Typing hands */}
-        {profile.showTypingHands && !reducedMotion && (
+        {/* Typing hands — a decorative overlay since the character's own
+            arms sit behind the desk front panel at this z-order. */}
+        {behaviour.activityLoop === "typing" && !reducedMotion && (
           <g>
             <rect x="84" y="149" width="6" height="4" rx="2" fill={teamColor} opacity="0.5">
               <animate attributeName="y" values="149;147;149" dur="0.4s" repeatCount="indefinite" />
@@ -218,25 +233,6 @@ export function ForemanDesk({
             <rect x="110" y="149" width="6" height="4" rx="2" fill={teamColor} opacity="0.5">
               <animate attributeName="y" values="149;147;149" dur="0.35s" repeatCount="indefinite" />
             </rect>
-          </g>
-        )}
-
-        {/* Thinking dots */}
-        {profile.showThinkingDots && !reducedMotion && (
-          <g transform="translate(140, 96)">
-            {[0, 8, 16].map((cx, i) => (
-              <circle key={i} cx={cx} cy="0" r="2.5" fill={teamColor} opacity="0.5">
-                <animate attributeName="opacity" values="0.5;0.15;0.5" dur="1.2s" begin={`${i * 0.2}s`} repeatCount="indefinite" />
-              </circle>
-            ))}
-          </g>
-        )}
-
-        {/* Error badge */}
-        {profile.showErrorBadge && (
-          <g>
-            <circle cx="160" cy="96" r="8" fill="#e34948" opacity="0.9" />
-            <text x="160" y="100" textAnchor="middle" fill="#fff" fontSize="11" fontWeight="700">!</text>
           </g>
         )}
 

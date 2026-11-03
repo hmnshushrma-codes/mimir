@@ -51,6 +51,7 @@ export function CharacterLab() {
   const [showBook, setShowBook] = useState(false);
   const [showRadio, setShowRadio] = useState(false);
   const [showSigns, setShowSigns] = useState(false);
+  const [showPhone, setShowPhone] = useState(false);
 
   const teamColor = dark ? CHARACTER_PALETTE[colorIndex].dark : CHARACTER_PALETTE[colorIndex].light;
   const capColor = contrastCapColor(teamColor);
@@ -78,7 +79,10 @@ export function CharacterLab() {
     showMug,
     showBook,
     showRadio,
-    signs: showSigns ? { yes: true, no: true } : null
+    signs: showSigns ? { yes: true, no: true } : null,
+    showPhone,
+    phonePosition: showPhone ? "in-hand" : "hidden",
+    lampDim: false
   };
 
   const manualBehaviour: Behaviour = {
@@ -158,6 +162,7 @@ export function CharacterLab() {
               <label><input type="checkbox" checked={showBook} onChange={(e) => setShowBook(e.target.checked)} /> book</label>
               <label><input type="checkbox" checked={showRadio} onChange={(e) => setShowRadio(e.target.checked)} /> radio</label>
               <label><input type="checkbox" checked={showSigns} onChange={(e) => setShowSigns(e.target.checked)} /> YES/NO signs</label>
+              <label><input type="checkbox" checked={showPhone} onChange={(e) => setShowPhone(e.target.checked)} /> phone</label>
             </div>
           </Labeled>
           <Labeled label="Effects (gated by context state below)">

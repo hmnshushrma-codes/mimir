@@ -5,7 +5,6 @@ export * from "./display-state.js";
 export * from "./preview.js";
 export * from "./raw-hook-events.js";
 export * from "./workshop-event.js";
-export * from "./mood.js";
 export * from "./project.js";
 export * from "./model.js";
 export * from "./serialize.js";

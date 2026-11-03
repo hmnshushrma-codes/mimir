@@ -8,7 +8,10 @@ const NO_PROPS: PropsConfig = {
   showMug: false,
   showBook: false,
   showRadio: false,
-  signs: null
+  signs: null,
+  showPhone: false,
+  phonePosition: "hidden",
+  lampDim: false
 };
 
 function props(overrides: Partial<PropsConfig>): PropsConfig {
@@ -175,6 +178,21 @@ export function behaviourFor(ctx: BehaviourContext): Behaviour {
     }
 
     case "awaiting_prompt":
+      // Foreman "idle holding phone" look — ported from the old profile
+      // system's FOREMAN_IDLE. Subagents don't carry a phone.
+      if (ctx.isForeman) {
+        return {
+          ...base,
+          pose: "leaning-back",
+          activityLoop: null,
+          expression: "happy",
+          eyesClosed: false,
+          gesture: null,
+          props: props({ monitorContent: "awaiting-prompt", showMug: true, showPhone: true, phonePosition: "in-hand" }),
+          effects: [],
+          speechBubble: null
+        };
+      }
       return {
         ...base,
         pose: "sitting",
@@ -188,6 +206,22 @@ export function behaviourFor(ctx: BehaviourContext): Behaviour {
       };
 
     case "sleeping":
+      // The foreman never visually sleeps — a long-idle foreman keeps the
+      // same "idle holding phone" look as awaiting_prompt rather than
+      // dozing off, since it's still the active supervisor of the session.
+      if (ctx.isForeman) {
+        return {
+          ...base,
+          pose: "leaning-back",
+          activityLoop: null,
+          expression: "happy",
+          eyesClosed: false,
+          gesture: null,
+          props: props({ monitorContent: "awaiting-prompt", showMug: true, showPhone: true, phonePosition: "in-hand" }),
+          effects: [],
+          speechBubble: null
+        };
+      }
       // The ONLY state with eyesClosed — see docs/agent-states.md & Face
       // comment: done/sleeping must never be confusable with each other.
       return {
@@ -197,7 +231,7 @@ export function behaviourFor(ctx: BehaviourContext): Behaviour {
         expression: "sleepy",
         eyesClosed: true,
         gesture: null,
-        props: props({ monitorContent: "off" }),
+        props: props({ monitorContent: "off", lampDim: true }),
         effects: ["zzz"],
         speechBubble: null
       };

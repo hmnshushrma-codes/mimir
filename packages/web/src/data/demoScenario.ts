@@ -34,17 +34,16 @@ const marketing = DEMO_PROJECTS.marketing;
 
 /**
  * 3 sessions across 2 projects (two sessions share the "agent-workshop"
- * repo on different branches), 9 total agents, and every mood from
- * mood.ts represented at least once:
- *   - focused / sleepy: ordinary tool-call / idle cycling, all sessions
- *   - excited: each delegate PreToolUse (S1, S2, S3 all delegate twice)
- *   - concentrating: S1 agent-1's long-running tool call (demo uses a short
- *     longToolCallMs so this shows up quickly — see demoSource.ts)
- *   - worried: S2 agent-2 hits a permission prompt
- *   - dizzy: S1 agent-2's single tool failure
- *   - frustrated: S3 agent-1's three consecutive tool failures
- *   - proud: every SubagentStop
- *   - neutral: implicit in SessionStart/entering and post-DEPART/leaving
+ * repo on different branches), 9 total agents, and every display state
+ * represented at least once:
+ *   - thinking / awaiting_prompt / sleeping: ordinary tool-call / idle
+ *     cycling, all sessions
+ *   - working: every delegate PreToolUse (S1, S2, S3 all delegate twice),
+ *     plus every ordinary tool call
+ *   - needs_permission: S2 agent-2 hits a permission prompt
+ *   - error: S1 agent-2's single tool failure, S3 agent-1's three
+ *     consecutive tool failures
+ *   - done: every SubagentStop
  */
 export const DEMO_STEPS: DemoStep[] = [
   // --- Session starts, interleaved ---
@@ -121,3 +120,101 @@ export const DEMO_STEPS: DemoStep[] = [
 
 export const DEMO_LOOP_GAP_MS = 6000;
 export const DEMO_TOTAL_DURATION_MS = Math.max(...DEMO_STEPS.map((s) => s.atMs)) + DEMO_LOOP_GAP_MS;
+
+// ─── Stress scenario (?demo=1&stress=1) — performance measurement only ───
+
+const STRESS_SESSION_COUNT = 4;
+const STRESS_SUBAGENTS_PER_SESSION = 5; // 20 total — under DeskArea's MAX_VISIBLE_WORKERS(6)/session cap
+const STRESS_CYCLE_MS = 2000;
+const STRESS_SPAWN_END_MS = 1000; // all 20 subagents are spawned by this point
+// Two burst windows with a genuinely quiet gap between them, all 20
+// subagents already on screen throughout — the gap is the "idle" fps/cpu
+// measurement (idle blink/breathing only, no incoming events); either burst
+// window is the "busy" measurement (sustained staggered tool-call churn).
+const STRESS_BURST_WINDOWS: ReadonlyArray<readonly [number, number]> = [
+  [STRESS_SPAWN_END_MS, 13_000],
+  [18_000, 30_000]
+];
+const STRESS_TOOL_NAMES = ["Bash", "Write", "Read", "Grep"] as const;
+
+/**
+ * Generated (not hand-authored) scenario that replays the real ingest path
+ * exactly like DEMO_STEPS, just at a scale (20 subagents across 4 sessions)
+ * the curated narrative above was never meant to cover. Every subagent
+ * repeatedly opens and closes a tool call on its own phase-offset cycle
+ * within each burst window, so no two agents start in lockstep — the point
+ * is sustained, staggered "busy" animation for fps/cpu measurement (plus a
+ * clean "idle" gap between bursts), not a readable story.
+ */
+function generateStressSteps(): DemoStep[] {
+  const steps: DemoStep[] = [];
+
+  for (let s = 0; s < STRESS_SESSION_COUNT; s++) {
+    const sessionId = `stress-s${s}`;
+    const project: ProjectInfo = s % 2 === 0
+      ? { ...DEMO_PROJECTS.workshop, id: `demo-proj-stress-${s}`, branch: `stress-${s}` }
+      : { ...DEMO_PROJECTS.marketing, id: `demo-proj-stress-${s}`, branch: `stress-${s}` };
+
+    steps.push({ atMs: s * 50, sessionId, project, payload: { hook_event_name: "SessionStart", source: "startup", cwd: project.rootPath } });
+    steps.push({ atMs: s * 50 + 100, sessionId, project, payload: { hook_event_name: "UserPromptSubmit", prompt: `Stress-test batch ${s + 1}` } });
+
+    for (let a = 0; a < STRESS_SUBAGENTS_PER_SESSION; a++) {
+      const agentId = `agent-${a + 1}`;
+      const agentType = "general-purpose";
+      const spawnAt = 300 + s * 50 + a * 40;
+      steps.push({
+        atMs: spawnAt,
+        sessionId,
+        project,
+        payload: { hook_event_name: "SubagentStart", agent_id: agentId, agent_type: agentType, task_description: `Stress task ${s + 1}.${a + 1}` }
+      });
+
+      let cycleIndex = 0;
+      for (const [windowStart, windowEnd] of STRESS_BURST_WINDOWS) {
+        // Stagger each agent's cycle phase so bursts don't land in lockstep.
+        const phaseOffsetMs = (a * 311 + s * 137) % STRESS_CYCLE_MS;
+        let t = windowStart + phaseOffsetMs;
+        while (t < windowEnd) {
+          const toolName = STRESS_TOOL_NAMES[(a + cycleIndex) % STRESS_TOOL_NAMES.length];
+          const toolUseId = `${sessionId}-${agentId}-${cycleIndex}`;
+          steps.push({
+            atMs: t,
+            sessionId,
+            project,
+            payload: { hook_event_name: "PreToolUse", tool_name: toolName, tool_input: {}, tool_use_id: toolUseId, agent_id: agentId, agent_type: agentType }
+          });
+          steps.push({
+            atMs: Math.min(t + STRESS_CYCLE_MS * 0.6, windowEnd - 50),
+            sessionId,
+            project,
+            payload: { hook_event_name: "PostToolUse", tool_name: toolName, tool_input: {}, tool_output: "ok", tool_use_id: toolUseId, agent_id: agentId, agent_type: agentType }
+          });
+          t += STRESS_CYCLE_MS;
+          cycleIndex++;
+        }
+      }
+
+      const lastWindowEnd = STRESS_BURST_WINDOWS[STRESS_BURST_WINDOWS.length - 1][1];
+      steps.push({
+        atMs: lastWindowEnd + 500 + a * 30,
+        sessionId,
+        project,
+        payload: { hook_event_name: "SubagentStop", agent_id: agentId, agent_type: agentType, exit_reason: "completed", last_assistant_message: "Stress task complete." }
+      });
+    }
+
+    const lastWindowEnd = STRESS_BURST_WINDOWS[STRESS_BURST_WINDOWS.length - 1][1];
+    steps.push({
+      atMs: lastWindowEnd + 1000,
+      sessionId,
+      project,
+      payload: { hook_event_name: "Stop", last_assistant_message: "Stress batch complete." }
+    });
+  }
+
+  return steps.sort((a, b) => a.atMs - b.atMs);
+}
+
+export const STRESS_STEPS: DemoStep[] = generateStressSteps();
+export const STRESS_LOOP_GAP_MS = DEMO_LOOP_GAP_MS;
+export const STRESS_TOTAL_DURATION_MS = Math.max(...STRESS_STEPS.map((s) => s.atMs)) + STRESS_LOOP_GAP_MS;
