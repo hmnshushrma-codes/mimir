@@ -45,6 +45,27 @@ export function roleFor(agentId: string, agentType: string | null): Role {
   }
 }
 
+/** Human-readable role label for a worker's name tag. Shows the real agent
+ *  type when it's known; falls back to "subagent" — never an empty string.
+ *  `agentType` can arrive as `""` (not just `null`) for an unlabeled Task
+ *  call, which `agentType ?? fallback` alone doesn't catch (`??` only
+ *  triggers on null/undefined) — that was the "Juno ·" trailing-dot bug. */
+export function roleLabel(agentId: string, agentType: string | null): string {
+  const role = roleFor(agentId, agentType);
+  switch (role) {
+    case "explore":
+      return "Explore";
+    case "plan":
+      return "Plan";
+    case "general-purpose":
+      return "general-purpose";
+    case "foreman":
+      return "Foreman";
+    default:
+      return agentType?.trim() || "subagent";
+  }
+}
+
 /**
  * Deterministic per-agent face: role (hard hat/goggles/glasses/cap/hashed
  * fallback) picks the primary identifying accessory; every other trait is

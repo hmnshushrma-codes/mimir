@@ -44,7 +44,7 @@ function SpiralEyes() {
 }
 
 function Eyebrows({ style, mood }: { style: FaceFeatures["eyebrowStyle"]; mood: Mood }) {
-  if (mood === "sleepy" || mood === "dizzy" || mood === "proud") return null;
+  if (mood === "sleepy" || mood === "dizzy") return null;
 
   const raised = mood === "worried" || mood === "excited";
   const angledDown = mood === "frustrated";
@@ -143,10 +143,11 @@ export function Face({ features, mood }: { features: FaceFeatures; mood: Mood })
   return (
     <>
       <HairTuft kind={features.hairTuft} />
+      {/* Closed eyes are reserved for "sleepy" — "proud"/done must read as
+          happy-and-awake (thumbs up), never confusable with asleep. */}
       {mood === "sleepy" && <ClosedCurveEyes direction="down" />}
-      {mood === "proud" && <ClosedCurveEyes direction="up" />}
       {mood === "dizzy" || mood === "frustrated" ? <SpiralEyes /> : null}
-      {mood !== "sleepy" && mood !== "proud" && mood !== "dizzy" && mood !== "frustrated" && <BaseEyes shape={features.eyeShape} />}
+      {mood !== "sleepy" && mood !== "dizzy" && mood !== "frustrated" && <BaseEyes shape={features.eyeShape} />}
       <Eyebrows style={features.eyebrowStyle} mood={mood} />
       <Nose shape={features.nose} />
       <Mouth mood={mood} />

@@ -3,24 +3,8 @@ import { motion } from "framer-motion";
 import type { SerializedAgent } from "@agent-workshop/shared";
 import { Character } from "../characters/Character.js";
 import { nameFor } from "../characters/names.js";
-import { roleFor } from "../characters/faceFeatures.js";
+import { roleLabel } from "../characters/faceFeatures.js";
 import { classifyAgentVisibility } from "../characters/agentVisibility.js";
-
-function roleLabel(agentId: string, agentType: string | null): string {
-  const role = roleFor(agentId, agentType);
-  switch (role) {
-    case "explore":
-      return "Explore";
-    case "plan":
-      return "Plan";
-    case "general-purpose":
-      return "general-purpose";
-    case "foreman":
-      return "Foreman";
-    default:
-      return agentType ?? "Agent";
-  }
-}
 
 function currentActivityLabel(agent: SerializedAgent): string | null {
   const active = agent.activeToolCalls[0];
