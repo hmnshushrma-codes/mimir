@@ -9,7 +9,7 @@ function wsUrl(): string {
   return fromEnv && fromEnv.length > 0 ? fromEnv : DEFAULT_WS_URL;
 }
 
-function restBaseUrl(): string {
+export function restBaseUrl(): string {
   return wsUrl().replace(/^ws/, "http").replace(/\/ws\/?$/, "");
 }
 

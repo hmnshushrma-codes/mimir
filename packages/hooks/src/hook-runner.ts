@@ -31,6 +31,11 @@ function readStdin(): Promise<string> {
 }
 
 async function main(): Promise<void> {
+  // Set by Mimir itself on subprocesses it spawns internally (e.g. the
+  // `claude -p` call behind session recaps) so that headless, non-user
+  // invocation doesn't get reported back to Mimir as a phantom session.
+  if (process.env.AGENT_WORKSHOP_SKIP_HOOKS === "1") return;
+
   const raw = await readStdin();
 
   let payload: Record<string, unknown>;

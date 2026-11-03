@@ -18,7 +18,7 @@ export function classifyAgentVisibility(
   nowMs: number,
   finishedWindowMs: number = FINISHED_SHELF_WINDOW_MS
 ): AgentVisibility {
-  if (agent.state.lifecycle !== "leaving") return "active";
+  if (!agent.state.leaving) return "active";
   const elapsed = nowMs - Date.parse(agent.state.updatedAt);
   if (!Number.isFinite(elapsed)) return "hidden";
   return elapsed < finishedWindowMs ? "finished" : "hidden";

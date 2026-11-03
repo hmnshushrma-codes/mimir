@@ -1,15 +1,17 @@
 import { createInitialAgentState, transitionAgent, type AgentState } from "./agent-state.js";
 import { MAIN_AGENT_ID, normalizeToWorkshopEvent, deriveAgentEvent, type WorkshopEvent } from "./workshop-event.js";
 import type { HookEventEnvelope } from "./raw-hook-events.js";
+import type { ActionCategory } from "./categories.js";
 import { fallbackProjectInfo, type ProjectInfo } from "./project.js";
 import { deriveMood, DEFAULT_LONG_TOOL_CALL_MS, type Mood } from "./mood.js";
+import { deriveDisplayState, DEFAULT_DISPLAY_STATE_CONFIG, type DisplayState, type DisplayStateConfig } from "./display-state.js";
 
 export type CorrelationConfidence = "confirmed" | "heuristic" | null;
 
 export interface ToolCallRecord {
   toolUseId: string;
   toolName: string;
-  category: string;
+  category: ActionCategory;
   status: "running" | "succeeded" | "failed";
   target: string | null;
   startedAt: string;
@@ -28,6 +30,8 @@ export interface AgentRecord {
   taskDescription: string | null;
   state: AgentState;
   presence: Presence;
+  displayState: DisplayState;
+  displayReason: string;
   mood: Mood;
   /** Consecutive PostToolUseFailure events with no success in between —
    *  drives the dizzy -> frustrated mood escalation. */
@@ -84,7 +88,10 @@ export class WorkshopModel {
    *  resolve a parent after the heuristic has already claimed it. */
   private delegateCallsByToolUseId = new Map<string, Map<string, PendingDelegate>>();
 
-  constructor(private readonly longToolCallMs: number = DEFAULT_LONG_TOOL_CALL_MS) {}
+  constructor(
+    private readonly longToolCallMs: number = DEFAULT_LONG_TOOL_CALL_MS,
+    private readonly displayStateConfig: DisplayStateConfig = DEFAULT_DISPLAY_STATE_CONFIG
+  ) {}
 
   /**
    * @param projectInfo Pre-resolved project identity for this event's cwd.
@@ -121,40 +128,66 @@ export class WorkshopModel {
       agent.state = transitionAgent(agent.state, agentEvent);
     }
 
+    this.recomputeDisplayState(agent, workshopEvent.timestamp);
     this.recomputeMood(agent, workshopEvent.timestamp);
 
     return { workshopEvent, project, session, agent };
   }
 
-  private earliestActiveToolCallStart(agent: AgentRecord): string | null {
-    let earliest: string | null = null;
+  private earliestActiveToolCall(agent: AgentRecord): ToolCallRecord | null {
+    let earliest: ToolCallRecord | null = null;
     for (const call of agent.activeToolCalls.values()) {
-      if (earliest === null || call.startedAt < earliest) earliest = call.startedAt;
+      if (earliest === null || call.startedAt < earliest.startedAt) earliest = call;
     }
     return earliest;
   }
 
+  /** `done`/`leaving` agents don't count as "still active" for the purposes
+   *  of the foreman's `supervising` state — see docs/agent-states.md. */
   private hasActiveSubagents(session: SessionRecord): boolean {
     for (const a of session.agents.values()) {
-      if (a.id !== MAIN_AGENT_ID && a.presence === "active" &&
-          a.state.lifecycle !== "done" && a.state.lifecycle !== "leaving") {
+      if (a.id !== MAIN_AGENT_ID && a.presence === "active" && !a.state.done && !a.state.leaving) {
         return true;
       }
     }
     return false;
   }
 
-  private recomputeMood(agent: AgentRecord, nowIso: string): void {
+  private recomputeDisplayState(agent: AgentRecord, nowIso: string): void {
     const session = this.sessions.get(agent.sessionId);
+    const openToolCalls = Array.from(agent.activeToolCalls.values()).map((call) => ({
+      toolName: call.toolName,
+      category: call.category,
+      startedAt: call.startedAt
+    }));
+    const result = deriveDisplayState(
+      {
+        needsPermission: agent.state.needsPermission,
+        openToolCalls,
+        awaitingPrompt: agent.state.awaitingPrompt,
+        done: agent.state.done,
+        consecutiveErrors: agent.consecutiveErrors,
+        lastError: agent.state.lastError,
+        lastEventAt: agent.lastEventAt,
+        isForeman: agent.id === MAIN_AGENT_ID,
+        hasActiveSubagents: session ? this.hasActiveSubagents(session) : false,
+        nowIso
+      },
+      this.displayStateConfig
+    );
+    agent.displayState = result.state;
+    agent.displayReason = result.reason;
+  }
+
+  private recomputeMood(agent: AgentRecord, nowIso: string): void {
+    const earliestCall = this.earliestActiveToolCall(agent);
     agent.mood = deriveMood(
       {
-        lifecycle: agent.state.lifecycle,
-        category: agent.state.category,
-        activeToolCallStartedAt: this.earliestActiveToolCallStart(agent),
+        state: agent.displayState,
+        category: earliestCall?.category ?? null,
+        activeToolCallStartedAt: earliestCall?.startedAt ?? null,
         consecutiveErrors: agent.consecutiveErrors,
-        nowIso,
-        isForeman: agent.id === MAIN_AGENT_ID,
-        hasActiveSubagents: session ? this.hasActiveSubagents(session) : false
+        nowIso
       },
       this.longToolCallMs
     );
@@ -211,6 +244,8 @@ export class WorkshopModel {
         taskDescription,
         state: createInitialAgentState(event.timestamp),
         presence: "active",
+        displayState: "thinking",
+        displayReason: "",
         mood: "neutral",
         consecutiveErrors: 0,
         lastEventAt: event.timestamp,
@@ -328,7 +363,7 @@ export class WorkshopModel {
       // Check if any subagent in this session is still active
       let hasActiveSubagent = false;
       for (const agent of session.agents.values()) {
-        if (agent.id !== MAIN_AGENT_ID && agent.presence === "active" && agent.state.lifecycle !== "done" && agent.state.lifecycle !== "leaving") {
+        if (agent.id !== MAIN_AGENT_ID && agent.presence === "active" && !agent.state.done && !agent.state.leaving) {
           hasActiveSubagent = true;
           break;
         }
@@ -340,6 +375,14 @@ export class WorkshopModel {
 
         // Foreman stays active while any subagent is working (supervising)
         if (agent.id === MAIN_AGENT_ID && hasActiveSubagent && next !== "active") {
+          next = "active";
+        }
+
+        // A long-running tool call (e.g. Monitor waiting on a background
+        // process) produces no new events while it's blocked — that absence
+        // of events isn't idleness, it's the agent legitimately waiting on
+        // its own in-flight call. Don't age it out from under itself.
+        if (agent.activeToolCalls.size > 0 && next !== "active") {
           next = "active";
         }
 
@@ -361,7 +404,7 @@ export class WorkshopModel {
     const now = Date.parse(nowIso);
     for (const session of this.sessions.values()) {
       for (const agent of session.agents.values()) {
-        if (agent.state.lifecycle === "done" && now - Date.parse(agent.state.updatedAt) >= departAfterMs) {
+        if (agent.state.done && !agent.state.leaving && now - Date.parse(agent.state.updatedAt) >= departAfterMs) {
           agent.state = transitionAgent(agent.state, { type: "DEPART", at: nowIso });
           touched.push({ sessionId: session.id, agentId: agent.id });
         }
@@ -370,17 +413,22 @@ export class WorkshopModel {
     return touched;
   }
 
-  /** Mood can change purely from elapsed time (a tool call crossing the
-   *  "long" threshold) with no new event to trigger ingest()'s own
-   *  recomputeMood call — this sweep covers that case. Returns the agents
-   *  whose mood actually changed. */
-  sweepMoods(nowIso: string): Array<{ sessionId: string; agentId: string }> {
+  /** Display state (and the mood derived from it) can change purely from
+   *  elapsed time — thinking -> stalled, awaiting_prompt -> sleeping, a long
+   *  tool call crossing the "concentrating" threshold — with no new event to
+   *  trigger ingest()'s own recompute calls. This sweep covers that case.
+   *  Returns the agents whose display state or mood actually changed. */
+  sweepDisplayStates(nowIso: string): Array<{ sessionId: string; agentId: string }> {
     const touched: Array<{ sessionId: string; agentId: string }> = [];
     for (const session of this.sessions.values()) {
       for (const agent of session.agents.values()) {
-        const previous = agent.mood;
+        const previousState = agent.displayState;
+        const previousMood = agent.mood;
+        this.recomputeDisplayState(agent, nowIso);
         this.recomputeMood(agent, nowIso);
-        if (agent.mood !== previous) touched.push({ sessionId: session.id, agentId: agent.id });
+        if (agent.displayState !== previousState || agent.mood !== previousMood) {
+          touched.push({ sessionId: session.id, agentId: agent.id });
+        }
       }
     }
     return touched;
@@ -396,7 +444,15 @@ export class WorkshopModel {
     for (const session of this.sessions.values()) {
       if (session.status === "ended") continue;
       const elapsed = now - Date.parse(session.lastEventAt);
-      const next: SessionStatus = elapsed >= endedAfterMs ? "ended" : elapsed >= idleMs ? "idle" : "active";
+      let next: SessionStatus = elapsed >= endedAfterMs ? "ended" : elapsed >= idleMs ? "idle" : "active";
+
+      // A long-running tool call (e.g. Monitor waiting on a background
+      // process) produces no new events for as long as it's blocked — that
+      // silence shouldn't age the whole session into "idle"/"ended" and drop
+      // it out of the live view out from under a still-working agent.
+      const hasActiveToolCall = Array.from(session.agents.values()).some((a) => a.activeToolCalls.size > 0);
+      if (hasActiveToolCall) next = "active";
+
       if (next !== session.status) {
         session.status = next;
         touched.push({ sessionId: session.id });

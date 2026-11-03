@@ -1,5 +1,6 @@
 import { useState } from "react";
 import type { SerializedSession } from "@agent-workshop/shared";
+import { SessionRecap } from "./SessionRecap.js";
 
 export function FinishedSessionsShelf({
   sessions,
@@ -19,9 +20,12 @@ export function FinishedSessionsShelf({
       {open && (
         <div className="finished-today-list">
           {sessions.map((s) => (
-            <div key={s.id} className="finished-today-item muted">
-              {projectNameFor(s.projectId)} · {s.id.slice(0, 8)}
-              {s.branch ? ` · ${s.branch}` : ""}
+            <div key={s.id} className="finished-today-item">
+              <div className="muted">
+                {projectNameFor(s.projectId)} · {s.id.slice(0, 8)}
+                {s.branch ? ` · ${s.branch}` : ""}
+              </div>
+              <SessionRecap sessionId={s.id} />
             </div>
           ))}
         </div>

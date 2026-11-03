@@ -83,4 +83,24 @@ describe("hook-runner", () => {
     expect(result.stderr).toBe("");
     expect(result.exitCode).toBe(0);
   });
+
+  it("does not report to the collector when AGENT_WORKSHOP_SKIP_HOOKS=1", async () => {
+    let received = false;
+    server = createServer((_req, res) => {
+      received = true;
+      res.writeHead(204);
+      res.end();
+    });
+    await new Promise<void>((resolve) => server!.listen(0, "127.0.0.1", resolve));
+    const port = (server!.address() as { port: number }).port;
+
+    const payload = { session_id: "s1", hook_event_name: "SessionStart", source: "startup" };
+    const result = await runHook(JSON.stringify(payload), {
+      AGENT_WORKSHOP_URL: `http://127.0.0.1:${port}/events`,
+      AGENT_WORKSHOP_SKIP_HOOKS: "1"
+    });
+
+    expect(result.exitCode).toBe(0);
+    expect(received).toBe(false);
+  });
 });

@@ -11,6 +11,7 @@
  *   mimir uninstall    Remove hooks
  *   mimir status       Show hook & collector status
  *   mimir demo         Start with demo mode (no real session needed)
+ *   mimir replay-summary [--db <path>]   Per-agent display-state time breakdown
  *   mimir --help       Show this help
  */
 
@@ -20,6 +21,7 @@ import { existsSync, readFileSync, writeFileSync, copyFileSync, mkdirSync, rmSyn
 import { loadConfig } from "@agent-workshop/server/config";
 import { openDb } from "@agent-workshop/server/db";
 import { buildApp } from "@agent-workshop/server/server";
+import { runReplaySummary } from "@agent-workshop/server/replay-summary";
 import {
   installHooks,
   uninstallHooks,
@@ -174,6 +176,17 @@ async function cmdStart(demo: boolean): Promise<void> {
   }
 }
 
+function cmdReplaySummary(dbPathArg: string | undefined): void {
+  const dbPath = dbPathArg ?? loadConfig().dbPath;
+  if (!existsSync(dbPath)) {
+    console.error(`Database not found: ${dbPath}`);
+    process.exitCode = 1;
+    return;
+  }
+  const db = openDb(dbPath);
+  runReplaySummary(db);
+}
+
 function showHelp(): void {
   console.log(`
 mimir — Live animated visualization of Claude Code sessions
@@ -186,6 +199,7 @@ Usage:
   mimir install --project   Install hooks for current project only
   mimir uninstall       Remove hooks
   mimir status          Show hook install & collector status
+  mimir replay-summary [--db <path>]   Per-agent display-state time breakdown
   mimir --help          Show this help
 
 Quick start:
@@ -225,6 +239,12 @@ async function main(): Promise<void> {
     case "status":
       await cmdStatus();
       break;
+    case "replay-summary": {
+      const dbFlagIndex = args.indexOf("--db");
+      const dbPathArg = dbFlagIndex !== -1 ? args[dbFlagIndex + 1] : undefined;
+      cmdReplaySummary(dbPathArg);
+      break;
+    }
     default:
       console.error(`Unknown command: ${command}`);
       showHelp();

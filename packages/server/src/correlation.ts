@@ -3,6 +3,26 @@ import path from "node:path";
 import { z } from "zod";
 import type { HookEventEnvelope, WorkshopModel } from "@agent-workshop/shared";
 
+/**
+ * IMPORTANT — this file resolves PARENT LINKAGE ONLY (who spawned whom), not
+ * event ownership. Event ownership (which agent a given hook event belongs
+ * to) is already fully solved elsewhere: every hook event carries its own
+ * `agent_id`, and `WorkshopModel.getOrCreateAgent()` (packages/shared/src/model.ts)
+ * uses that `agent_id` as the sole key for creating/looking up the agent
+ * record — there is no ambiguity or fallback involved in that path.
+ *
+ * What's genuinely uncertain is which agent *delegated* to a given subagent.
+ * `WorkshopModel` resolves that with two layers:
+ *   1. A live FIFO heuristic (`trackDelegation`/`claimDelegation` in model.ts):
+ *      pairs a delegate-category `PreToolUse` with the next `SubagentStart`
+ *      in the same session. Works immediately, no filesystem access, but is
+ *      only a heuristic (wrong if calls interleave unexpectedly).
+ *   2. This file's async enrichment: reads the subagent's own
+ *      `agent-<id>.meta.json`, which names the exact `tool_use_id` that
+ *      spawned it, and upgrades the heuristic pairing to "confirmed" via
+ *      `WorkshopModel.confirmDelegation()`. Fire-and-forget — if the file
+ *      can't be found or parsed, the heuristic pairing simply stands.
+ */
 const SubagentMetaSchema = z.object({
   agentType: z.string().optional(),
   description: z.string().optional(),
@@ -11,33 +31,23 @@ const SubagentMetaSchema = z.object({
 });
 
 /**
- * Candidate on-disk locations for a subagent's `agent-<id>.meta.json`, per
- * the empirical layout documented in docs/hook-events.md §4:
- *
- *   <projectDir>/<sessionId>.jsonl              (main transcript)
+ * On-disk location of a subagent's `agent-<id>.meta.json`:
  *   <projectDir>/<sessionId>/subagents/agent-<agentId>.meta.json
  *
- * We don't know for certain whether a SubagentStart event's `transcript_path`
- * points at the main transcript or at the subagent's own transcript file
- * (docs/hook-events.md §7, open question 1), so we derive both candidates
- * and try each.
+ * Confirmed empirically (not just by the hook-events doc) by checking every
+ * real `agent-*.meta.json` on this machine across 4 different projects
+ * (including demo fixtures) — all matched this one shape. An earlier version
+ * of this function also generated a second candidate for the case where
+ * `transcript_path` already pointed inside a `subagents/` directory; zero
+ * real occurrences of that shape were found, so it was removed. If a future
+ * Claude Code version changes the on-disk layout, this is the first place
+ * to look.
  */
 export function candidateMetaPaths(transcriptPath: string, agentId: string): string[] {
   const fileName = `agent-${agentId}.meta.json`;
-  const candidates: string[] = [];
-
-  if (transcriptPath.includes(`${path.sep}subagents${path.sep}`)) {
-    // transcript_path already looks like .../<sessionId>/subagents/agent-<x>.jsonl
-    const sessionDir = path.dirname(path.dirname(transcriptPath));
-    candidates.push(path.join(sessionDir, "subagents", fileName));
-  }
-
-  // transcript_path looks like .../<projectDir>/<sessionId>.jsonl
   const projectDir = path.dirname(transcriptPath);
   const sessionId = path.basename(transcriptPath, ".jsonl");
-  candidates.push(path.join(projectDir, sessionId, "subagents", fileName));
-
-  return candidates;
+  return [path.join(projectDir, sessionId, "subagents", fileName)];
 }
 
 async function readSubagentMeta(transcriptPath: string, agentId: string) {

@@ -25,8 +25,8 @@ function roleLabel(agentId: string, agentType: string | null): string {
 function currentActivityLabel(agent: SerializedAgent): string | null {
   const active = agent.activeToolCalls[0];
   if (active) return `${active.toolName} · ${active.target ?? "…"}`;
-  if (agent.state.lifecycle === "waiting_permission") return "waiting for permission";
-  if (agent.state.lifecycle === "error") return agent.state.lastError ?? "error";
+  if (agent.displayState === "needs_permission") return "waiting for permission";
+  if (agent.displayState === "error") return agent.state.lastError ?? "error";
   return null;
 }
 
@@ -70,7 +70,7 @@ export function WorkerCard({
         sessionId={sessionId}
         isForeman={false}
         mood={agent.mood}
-        category={agent.state.category}
+        category={agent.activeToolCalls[0]?.category ?? null}
         scale={0.8}
         reducedMotion={reducedMotion}
       />

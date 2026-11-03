@@ -50,6 +50,19 @@ export interface SessionSummary extends StoredSessionRow {
   eventCount: number;
 }
 
+export interface ProjectNotesRow {
+  projectId: string;
+  notes: string;
+  updatedAt: string;
+}
+
+export interface SessionRecapRow {
+  sessionId: string;
+  recap: string;
+  model: string | null;
+  generatedAt: string;
+}
+
 const SCHEMA = `
 CREATE TABLE IF NOT EXISTS events (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -87,6 +100,19 @@ CREATE TABLE IF NOT EXISTS sessions (
   status TEXT NOT NULL DEFAULT 'active'
 );
 CREATE INDEX IF NOT EXISTS idx_sessions_project ON sessions (project_id);
+
+CREATE TABLE IF NOT EXISTS project_notes (
+  project_id TEXT PRIMARY KEY,
+  notes TEXT NOT NULL DEFAULT '',
+  updated_at TEXT NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS session_recaps (
+  session_id TEXT PRIMARY KEY,
+  recap TEXT NOT NULL,
+  model TEXT,
+  generated_at TEXT NOT NULL
+);
 `;
 
 export function openDb(path: string): DatabaseSync {
@@ -150,6 +176,43 @@ export function listProjects(db: DatabaseSync): StoredProjectRow[] {
   }));
 }
 
+export function getProjectNotes(db: DatabaseSync, projectId: string): ProjectNotesRow | null {
+  const row = db.prepare(`SELECT * FROM project_notes WHERE project_id = ?`).get(projectId) as
+    | Record<string, unknown>
+    | undefined;
+  if (!row) return null;
+  return { projectId: row.project_id as string, notes: row.notes as string, updatedAt: row.updated_at as string };
+}
+
+export function upsertProjectNotes(db: DatabaseSync, projectId: string, notes: string, updatedAt: string): void {
+  db.prepare(
+    `INSERT INTO project_notes (project_id, notes, updated_at)
+     VALUES (?, ?, ?)
+     ON CONFLICT(project_id) DO UPDATE SET notes = excluded.notes, updated_at = excluded.updated_at`
+  ).run(projectId, notes, updatedAt);
+}
+
+export function getSessionRecap(db: DatabaseSync, sessionId: string): SessionRecapRow | null {
+  const row = db.prepare(`SELECT * FROM session_recaps WHERE session_id = ?`).get(sessionId) as
+    | Record<string, unknown>
+    | undefined;
+  if (!row) return null;
+  return {
+    sessionId: row.session_id as string,
+    recap: row.recap as string,
+    model: (row.model as string | null) ?? null,
+    generatedAt: row.generated_at as string
+  };
+}
+
+export function upsertSessionRecap(db: DatabaseSync, row: SessionRecapRow): void {
+  db.prepare(
+    `INSERT INTO session_recaps (session_id, recap, model, generated_at)
+     VALUES (?, ?, ?, ?)
+     ON CONFLICT(session_id) DO UPDATE SET recap = excluded.recap, model = excluded.model, generated_at = excluded.generated_at`
+  ).run(row.sessionId, row.recap, row.model, row.generatedAt);
+}
+
 function toEventRecord(row: Record<string, unknown>): EventRecord {
   return {
     id: row.id as number,
@@ -202,6 +265,33 @@ export function listSessionEvents(
     .prepare(`SELECT * FROM events WHERE session_id = ? AND id > ? ORDER BY id ASC LIMIT ?`)
     .all(sessionId, sinceId, limit) as Array<Record<string, unknown>>;
   return rows.map(toEventRecord);
+}
+
+export interface SearchResultRow extends EventRecord {
+  projectId: string;
+}
+
+/** Plain LIKE search across target/preview/tool_name — not FTS5. This is a
+ *  local personal tool at modest data volume; a substring scan is simple and
+ *  fast enough. Revisit with FTS5 only if it ever actually gets slow. */
+export function searchEvents(
+  db: DatabaseSync,
+  options: { q: string; projectId?: string; limit?: number }
+): SearchResultRow[] {
+  const limit = options.limit ?? 200;
+  const like = `%${options.q}%`;
+  const projectId = options.projectId ?? null;
+  const rows = db
+    .prepare(
+      `SELECT e.*, s.project_id AS project_id FROM events e
+       JOIN sessions s ON s.id = e.session_id
+       WHERE (e.target LIKE ? OR e.preview_input LIKE ? OR e.preview_output LIKE ? OR e.tool_name LIKE ?)
+         AND (? IS NULL OR s.project_id = ?)
+       ORDER BY e.timestamp DESC
+       LIMIT ?`
+    )
+    .all(like, like, like, like, projectId, projectId, limit) as Array<Record<string, unknown>>;
+  return rows.map((row) => ({ ...toEventRecord(row), projectId: row.project_id as string }));
 }
 
 /** Returns all stored events ordered by id (insertion order), for replay.

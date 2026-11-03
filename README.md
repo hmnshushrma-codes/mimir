@@ -94,6 +94,7 @@ All via environment variables, all optional:
 | `AGENT_WORKSHOP_HOST` | `127.0.0.1` | Bind address |
 | `AGENT_WORKSHOP_PREVIEWS` | `true` | Store tool previews |
 | `AGENT_WORKSHOP_IDLE_MS` | `120000` | Agent idle timeout (ms) |
+| `AGENT_WORKSHOP_DEPART_AFTER_MS` | `7000` | How long a finished agent lingers (done pose + wave) before departing |
 
 ## Development
 

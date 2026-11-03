@@ -87,7 +87,7 @@ describe("deriveAgentEvent", () => {
     expect(deriveAgentEvent(e)).toEqual({ type: "SPAWNED", at: TS });
   });
 
-  it("maps PreToolUse to TOOL_STARTED with the right category", () => {
+  it("maps PreToolUse to TOOL_STARTED", () => {
     const e = envelope({
       session_id: "abc123",
       hook_event_name: "PreToolUse",
@@ -95,7 +95,7 @@ describe("deriveAgentEvent", () => {
       tool_input: { file_path: "a.ts" },
       tool_use_id: "toolu_1"
     });
-    expect(deriveAgentEvent(e)).toEqual({ type: "TOOL_STARTED", category: "write", at: TS });
+    expect(deriveAgentEvent(e)).toEqual({ type: "TOOL_STARTED", at: TS });
   });
 
   it("maps PostToolUse to TOOL_SUCCEEDED", () => {
@@ -142,7 +142,7 @@ describe("deriveAgentEvent", () => {
     expect(deriveAgentEvent(e)).toBeNull();
   });
 
-  it("maps SubagentStop and Stop and SessionEnd to STOPPED", () => {
+  it("maps SubagentStop and SessionEnd to DONE, but Stop to AWAIT_PROMPT", () => {
     const subagentStop = envelope({
       session_id: "abc123",
       hook_event_name: "SubagentStop",
@@ -153,14 +153,14 @@ describe("deriveAgentEvent", () => {
     const stop = envelope({ session_id: "abc123", hook_event_name: "Stop" });
     const sessionEnd = envelope({ session_id: "abc123", hook_event_name: "SessionEnd", reason: "other" });
 
-    expect(deriveAgentEvent(subagentStop)).toEqual({ type: "STOPPED", at: TS });
-    expect(deriveAgentEvent(stop)).toEqual({ type: "STOPPED", at: TS });
-    expect(deriveAgentEvent(sessionEnd)).toEqual({ type: "STOPPED", at: TS });
+    expect(deriveAgentEvent(subagentStop)).toEqual({ type: "DONE", at: TS });
+    expect(deriveAgentEvent(stop)).toEqual({ type: "AWAIT_PROMPT", at: TS });
+    expect(deriveAgentEvent(sessionEnd)).toEqual({ type: "DONE", at: TS });
   });
 
-  it("returns null for events with no lifecycle meaning (e.g. UserPromptSubmit)", () => {
+  it("maps UserPromptSubmit to PROMPT_SUBMITTED", () => {
     const e = envelope({ session_id: "abc123", hook_event_name: "UserPromptSubmit", prompt: "hi" });
-    expect(deriveAgentEvent(e)).toBeNull();
+    expect(deriveAgentEvent(e)).toEqual({ type: "PROMPT_SUBMITTED", at: TS });
   });
 });
 

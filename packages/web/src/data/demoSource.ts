@@ -41,7 +41,7 @@ export function connectDemoSource(): () => void {
       const agentTouched = [
         ...model.sweepPresence(now, IDLE_MS, STALE_MS),
         ...model.sweepDepartures(now, DEPART_AFTER_MS),
-        ...model.sweepMoods(now)
+        ...model.sweepDisplayStates(now)
       ];
       const deduped = new Map(agentTouched.map((t) => [`${t.sessionId}:${t.agentId}`, t]));
       for (const { sessionId, agentId } of deduped.values()) {
