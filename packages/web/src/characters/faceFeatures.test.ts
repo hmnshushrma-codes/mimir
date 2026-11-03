@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { MAIN_AGENT_ID } from "@agent-workshop/shared";
-import { deriveFaceFeatures, roleFor } from "./faceFeatures.js";
+import { deriveFaceFeatures, roleFor, roleLabel } from "./faceFeatures.js";
 
 describe("roleFor", () => {
   it("maps the main agent to foreman regardless of agentType", () => {
@@ -17,6 +17,34 @@ describe("roleFor", () => {
   it("maps unrecognized types to unknown", () => {
     expect(roleFor("agent-1", "security-reviewer")).toBe("unknown");
     expect(roleFor("agent-1", null)).toBe("unknown");
+  });
+});
+
+describe("roleLabel", () => {
+  it("shows the known agent type for recognized roles", () => {
+    expect(roleLabel(MAIN_AGENT_ID, null)).toBe("Foreman");
+    expect(roleLabel("agent-1", "Explore")).toBe("Explore");
+    expect(roleLabel("agent-1", "general-purpose")).toBe("general-purpose");
+  });
+
+  it("shows a custom agent type verbatim when it's known", () => {
+    expect(roleLabel("agent-1", "security-reviewer")).toBe("security-reviewer");
+  });
+
+  it("falls back to 'subagent' for a null agentType, never an empty string", () => {
+    expect(roleLabel("agent-1", null)).toBe("subagent");
+  });
+
+  // Regression: a real Task call without an explicit subagent_type can send
+  // agent_type as "" rather than omitting it. `agentType ?? "fallback"`
+  // doesn't catch that (?? only triggers on null/undefined), which produced
+  // name tags like "Juno ·" with nothing after the dot.
+  it("falls back to 'subagent' for an empty-string agentType, never an empty string", () => {
+    expect(roleLabel("agent-1", "")).toBe("subagent");
+  });
+
+  it("falls back to 'subagent' for a whitespace-only agentType", () => {
+    expect(roleLabel("agent-1", "   ")).toBe("subagent");
   });
 });
 

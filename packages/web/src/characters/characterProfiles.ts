@@ -195,6 +195,26 @@ const AGENT_WAITING: CharacterProfile = {
   transitionMs: 300,
 };
 
+// "done" (brief happy reaction, eyes open) must stay visually distinct from
+// "sleeping" (eyes closed, Zzz) — they used to collapse onto the same
+// profile object below, which is the "proud thumbs-up AND Zzz at once" bug.
+const AGENT_DONE: CharacterProfile = {
+  eyes: "open",
+  headPose: "still",
+  leftHand: "resting",
+  rightHand: "resting",
+  showPhone: false,
+  phonePosition: "hidden",
+  showMug: true,
+  monitorState: "dim",
+  showZzz: false,
+  showErrorBadge: false,
+  showThinkingDots: false,
+  showTypingHands: false,
+  lampDim: false,
+  transitionMs: 300,
+};
+
 const AGENT_SLEEPING: CharacterProfile = {
   eyes: "closed",
   headPose: "down",
@@ -266,7 +286,7 @@ const AGENT_PROFILES: Record<CharacterState, CharacterProfile> = {
   working: AGENT_WORKING,
   waiting: AGENT_WAITING,
   error: AGENT_ERROR,
-  done: AGENT_SLEEPING,
+  done: AGENT_DONE,
   sleeping: AGENT_SLEEPING,
   spawned: AGENT_SPAWNED,
   leaving: AGENT_LEAVING,
@@ -294,7 +314,11 @@ export function moodToState(mood: Mood, isForeman: boolean, hasActiveTool: boole
     case "frustrated":
       return "error";
     case "proud":
-      return isForeman ? "done" : "sleeping";
+      // "done" must never be confused with "sleeping" — a finished subagent
+      // showing thumbs-up (proud mood) should have its eyes open, not Zzz.
+      // Subagents structurally can't reach displayState "sleeping" anymore
+      // (see docs/agent-states.md), so this used to be live-wrong here.
+      return "done";
     case "sleepy":
       return isForeman ? "idle" : "sleeping";
     case "excited":
