@@ -21,8 +21,8 @@ function Zzz({ animate }: { animate: boolean }) {
 function Sweat({ animate }: { animate: boolean }) {
   return (
     <motion.g
-      transform="translate(26,34) scale(1.2)"
-      animate={animate ? { y: [0, 4, 0], opacity: [0.7, 1, 0.7] } : undefined}
+      transform="translate(46,24) scale(1.1)"
+      animate={animate ? { y: [0, 6, 0], opacity: [0.7, 1, 0.7] } : undefined}
       transition={{ duration: 1, repeat: Infinity, ease: "easeInOut" }}
     >
       <path d="M0 0 C 6 8 6 14 0 14 C -6 14 -6 8 0 0 Z" fill="#6fb8f0" stroke="#fff" strokeWidth={0.5} />

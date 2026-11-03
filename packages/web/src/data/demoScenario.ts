@@ -61,7 +61,9 @@ export const DEMO_STEPS: DemoStep[] = [
   { atMs: 1800, sessionId: S1, project: workshopMain, payload: { hook_event_name: "PreToolUse", tool_name: "Agent", tool_input: { description: "Audit the auth flow" }, tool_use_id: "s1-delegate-1" } },
   { atMs: 1900, sessionId: S1, project: workshopMain, payload: { hook_event_name: "PreToolUse", tool_name: "Agent", tool_input: { description: "Scaffold dark mode CSS variables" }, tool_use_id: "s1-delegate-2" } },
   { atMs: 2200, sessionId: S1, project: workshopMain, payload: { hook_event_name: "SubagentStart", agent_id: "agent-1", agent_type: "security-reviewer", task_description: "Audit the auth flow" } },
+  { atMs: 2250, sessionId: S1, project: workshopMain, payload: { hook_event_name: "PostToolUse", tool_name: "Agent", tool_input: {}, tool_output: "Subagent started", tool_use_id: "s1-delegate-1" } },
   { atMs: 2300, sessionId: S1, project: workshopMain, payload: { hook_event_name: "SubagentStart", agent_id: "agent-2", agent_type: "general-purpose", task_description: "Scaffold dark mode CSS variables" } },
+  { atMs: 2350, sessionId: S1, project: workshopMain, payload: { hook_event_name: "PostToolUse", tool_name: "Agent", tool_input: {}, tool_output: "Subagent started", tool_use_id: "s1-delegate-2" } },
 
   // S1 agent-1: a long-running tool call (-> concentrating once it crosses the demo threshold)
   { atMs: 2600, sessionId: S1, project: workshopMain, payload: { hook_event_name: "PreToolUse", tool_name: "Grep", tool_input: { pattern: "password" }, tool_use_id: "s1-a1-long", agent_id: "agent-1", agent_type: "security-reviewer" } },
@@ -79,7 +81,9 @@ export const DEMO_STEPS: DemoStep[] = [
   { atMs: 1800, sessionId: S2, project: workshopFeature, payload: { hook_event_name: "PreToolUse", tool_name: "Agent", tool_input: { description: "Write ThemeProvider tests" }, tool_use_id: "s2-delegate-1" } },
   { atMs: 1900, sessionId: S2, project: workshopFeature, payload: { hook_event_name: "PreToolUse", tool_name: "Agent", tool_input: { description: "Update the CSS build pipeline" }, tool_use_id: "s2-delegate-2" } },
   { atMs: 2200, sessionId: S2, project: workshopFeature, payload: { hook_event_name: "SubagentStart", agent_id: "agent-1", agent_type: "Plan", task_description: "Write ThemeProvider tests" } },
+  { atMs: 2250, sessionId: S2, project: workshopFeature, payload: { hook_event_name: "PostToolUse", tool_name: "Agent", tool_input: {}, tool_output: "Subagent started", tool_use_id: "s2-delegate-1" } },
   { atMs: 2300, sessionId: S2, project: workshopFeature, payload: { hook_event_name: "SubagentStart", agent_id: "agent-2", agent_type: "general-purpose", task_description: "Update the CSS build pipeline" } },
+  { atMs: 2350, sessionId: S2, project: workshopFeature, payload: { hook_event_name: "PostToolUse", tool_name: "Agent", tool_input: {}, tool_output: "Subagent started", tool_use_id: "s2-delegate-2" } },
 
   { atMs: 2700, sessionId: S2, project: workshopFeature, payload: { hook_event_name: "PreToolUse", tool_name: "Bash", tool_input: { command: "npm test -- ThemeProvider" }, tool_use_id: "s2-a1-t1", agent_id: "agent-1", agent_type: "Plan" } },
   { atMs: 3400, sessionId: S2, project: workshopFeature, payload: { hook_event_name: "PostToolUse", tool_name: "Bash", tool_input: {}, tool_output: "4 passed", tool_use_id: "s2-a1-t1", agent_id: "agent-1", agent_type: "Plan" } },
@@ -94,7 +98,9 @@ export const DEMO_STEPS: DemoStep[] = [
   { atMs: 1800, sessionId: S3, project: marketing, payload: { hook_event_name: "PreToolUse", tool_name: "Agent", tool_input: { description: "Fix the deploy script" }, tool_use_id: "s3-delegate-1" } },
   { atMs: 1900, sessionId: S3, project: marketing, payload: { hook_event_name: "PreToolUse", tool_name: "Agent", tool_input: { description: "Check CDN cache headers" }, tool_use_id: "s3-delegate-2" } },
   { atMs: 2200, sessionId: S3, project: marketing, payload: { hook_event_name: "SubagentStart", agent_id: "agent-1", agent_type: "devops-bot", task_description: "Fix the deploy script" } },
+  { atMs: 2250, sessionId: S3, project: marketing, payload: { hook_event_name: "PostToolUse", tool_name: "Agent", tool_input: {}, tool_output: "Subagent started", tool_use_id: "s3-delegate-1" } },
   { atMs: 2300, sessionId: S3, project: marketing, payload: { hook_event_name: "SubagentStart", agent_id: "agent-2", agent_type: "Explore", task_description: "Check CDN cache headers" } },
+  { atMs: 2350, sessionId: S3, project: marketing, payload: { hook_event_name: "PostToolUse", tool_name: "Agent", tool_input: {}, tool_output: "Subagent started", tool_use_id: "s3-delegate-2" } },
 
   { atMs: 2600, sessionId: S3, project: marketing, payload: { hook_event_name: "PreToolUse", tool_name: "Bash", tool_input: { command: "./deploy.sh" }, tool_use_id: "s3-a1-t1", agent_id: "agent-1", agent_type: "devops-bot" } },
   { atMs: 3000, sessionId: S3, project: marketing, payload: { hook_event_name: "PostToolUseFailure", tool_name: "Bash", tool_input: {}, tool_use_id: "s3-a1-t1", error: "exit 1", agent_id: "agent-1", agent_type: "devops-bot" } },

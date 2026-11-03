@@ -106,6 +106,11 @@ pnpm typecheck
 pnpm lint
 ```
 
+## Links
+
+- [oyenino.com](https://oyenino.com) — by the creator
+- [ninoforge.com](https://ninoforge.com) — more fun projects
+
 ## License
 
 MIT

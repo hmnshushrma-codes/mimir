@@ -19,9 +19,9 @@ function ctx(overrides: Partial<BehaviourContext> = {}): BehaviourContext {
 }
 
 describe("behaviourFor — one case per table row", () => {
-  it("working, write/shell category -> sitting + typing + focused", () => {
-    const b = behaviourFor(ctx({ state: "working", category: "shell" }));
-    expect(b.pose).toBe("sitting");
+  it("working, write/shell category -> leaning-forward + typing + focused", () => {
+    const b = behaviourFor(ctx({ state: "working", category: "write" }));
+    expect(b.pose).toBe("leaning-forward");
     expect(b.activityLoop).toBe("typing");
     expect(b.expression).toBe("focused");
     expect(b.props.showKeyboard).toBe(true);
@@ -32,17 +32,17 @@ describe("behaviourFor — one case per table row", () => {
     expect(b.effects).toContain("sweat");
   });
 
-  it("working, read category -> sitting + reading + curious", () => {
+  it("working, read category -> sitting + reading + focused", () => {
     const b = behaviourFor(ctx({ state: "working", category: "read" }));
     expect(b.activityLoop).toBe("reading");
-    expect(b.expression).toBe("curious");
+    expect(b.expression).toBe("focused");
     expect(b.props.showBook).toBe(true);
   });
 
-  it("working, web category -> listening + curious", () => {
+  it("working, web/shell category -> listening + focused", () => {
     const b = behaviourFor(ctx({ state: "working", category: "web" }));
     expect(b.activityLoop).toBe("listening");
-    expect(b.expression).toBe("curious");
+    expect(b.expression).toBe("focused");
   });
 
   it("thinking -> sitting + thinking loop + curious + thought bubble", () => {
@@ -59,12 +59,12 @@ describe("behaviourFor — one case per table row", () => {
     expect(b.expression).toBe("focused");
   });
 
-  it("needs_permission -> standing + pleading + YES/NO signs + wave", () => {
+  it("needs_permission -> standing + pleading + YES/NO signs + raise-hand", () => {
     const b = behaviourFor(ctx({ state: "needs_permission" }));
     expect(b.pose).toBe("standing");
     expect(b.expression).toBe("pleading");
     expect(b.props.signs).toEqual({ yes: true, no: true });
-    expect(b.gesture?.name).toBe("wave");
+    expect(b.gesture?.name).toBe("raise-hand");
   });
 
   it("needs_input -> standing + curious + speech bubble with option count", () => {
@@ -74,18 +74,18 @@ describe("behaviourFor — one case per table row", () => {
     expect(b.speechBubble).toEqual({ text: "?", optionCount: 3 });
   });
 
-  it("error, <3 consecutive -> confused + scratch-head + dizzy stars", () => {
+  it("error, <3 consecutive -> worried + scratch-head + sweat", () => {
     const b = behaviourFor(ctx({ state: "error", consecutiveErrors: 1 }));
-    expect(b.expression).toBe("confused");
+    expect(b.expression).toBe("worried");
     expect(b.gesture?.name).toBe("scratch-head");
-    expect(b.effects).toEqual(["dizzy-stars"]);
+    expect(b.effects).toEqual(["sweat"]);
   });
 
-  it("error, 3+ consecutive -> frustrated + facepalm + steam", () => {
+  it("error, 3+ consecutive -> frustrated + shrug + calm regroup (no effects)", () => {
     const b = behaviourFor(ctx({ state: "error", consecutiveErrors: 3 }));
     expect(b.expression).toBe("frustrated");
-    expect(b.gesture?.name).toBe("facepalm");
-    expect(b.effects).toEqual(["steam"]);
+    expect(b.gesture?.name).toBe("shrug");
+    expect(b.effects).toEqual([]);
   });
 
   it("done phase 1 -> standing + proud + thumbs-up + sparkles, eyes open", () => {
@@ -106,25 +106,21 @@ describe("behaviourFor — one case per table row", () => {
     expect(b.effects).not.toContain("zzz");
   });
 
-  it("sleeping -> leaning back + sleepy + Zzz, eyes CLOSED", () => {
+  it("sleeping -> sitting + sleepy + Zzz, eyes CLOSED", () => {
     const b = behaviourFor(ctx({ state: "sleeping" }));
-    expect(b.pose).toBe("leaning-back");
+    expect(b.pose).toBe("sitting");
     expect(b.expression).toBe("sleepy");
     expect(b.eyesClosed).toBe(true);
     expect(b.effects).toEqual(["zzz"]);
     expect(b.props.lampDim).toBe(true);
   });
 
-  it("foreman never sleeps — sleeping renders the same idle-with-phone look as awaiting_prompt", () => {
+  it("foreman sleeps the same as subagents — eyes closed, zzz", () => {
     const sleeping = behaviourFor(ctx({ state: "sleeping", isForeman: true }));
-    const awaitingPrompt = behaviourFor(ctx({ state: "awaiting_prompt", isForeman: true }));
-    expect(sleeping.eyesClosed).toBe(false);
-    expect(sleeping.effects).not.toContain("zzz");
-    expect(sleeping.props.showPhone).toBe(true);
-    expect(sleeping.props.phonePosition).toBe("in-hand");
-    expect(sleeping.props.lampDim).toBe(false);
-    expect(sleeping.pose).toBe(awaitingPrompt.pose);
-    expect(sleeping.expression).toBe(awaitingPrompt.expression);
+    expect(sleeping.eyesClosed).toBe(true);
+    expect(sleeping.effects).toContain("zzz");
+    expect(sleeping.props.lampDim).toBe(true);
+    expect(sleeping.expression).toBe("sleepy");
   });
 
   it("awaiting_prompt only shows the phone for the foreman, not subagents", () => {

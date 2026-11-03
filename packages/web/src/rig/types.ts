@@ -2,7 +2,7 @@ import type { ActionCategory, DisplayState } from "@agent-workshop/shared";
 
 // ─── Layer unions (Part 2/3 spec) ───────────────────────────────
 
-export type Pose = "sitting" | "standing" | "leaning-back" | "jumping";
+export type Pose = "sitting" | "standing" | "leaning-back" | "leaning-forward" | "jumping";
 
 export type ActivityLoop = "typing" | "reading" | "listening" | "thinking" | "supervising" | null;
 

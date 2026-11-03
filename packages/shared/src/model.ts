@@ -444,4 +444,12 @@ export class WorkshopModel {
   getSnapshot(): SessionRecord[] {
     return Array.from(this.sessions.values());
   }
+
+  /** Clear all in-memory state so the model can be rehydrated from scratch. */
+  reset(): void {
+    this.sessions.clear();
+    this.projects.clear();
+    this.pendingDelegates.clear();
+    this.delegateCallsByToolUseId.clear();
+  }
 }
