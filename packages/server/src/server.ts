@@ -17,6 +17,8 @@ import {
 } from "@agent-workshop/shared";
 import type { ServerConfig } from "./config.js";
 import {
+  clearHistory,
+  purgeOldData,
   getProjectNotes,
   getSessionRecap,
   insertEvent,
@@ -104,7 +106,14 @@ export function buildApp({
   hub = new WsHub(),
   generateRecap = defaultGenerateRecap
 }: BuildAppOptions): FastifyInstance {
-  // Rehydrate the model from stored events so we don't lose state on restart
+  // Purge data older than 24 hours so stale sessions from other projects
+  // don't show up on startup (the DB file is local, never committed)
+  const purged = purgeOldData(db, 24 * 60 * 60 * 1000);
+  if (purged > 0) {
+    console.log(`agent-workshop: purged ${purged} events older than 24h`);
+  }
+
+  // Rehydrate the model from remaining events
   const rehydrated = rehydrateModel(model, db);
   if (rehydrated > 0) {
     console.log(`agent-workshop: rehydrated ${rehydrated} events from database`);
@@ -287,6 +296,32 @@ export function buildApp({
 
   app.get("/detected-sessions", async () => {
     return detector.list();
+  });
+
+  app.delete("/history", async () => {
+    // Keep any sessions that are currently active in the in-memory model
+    const activeSessionIds: string[] = [];
+    for (const session of model.getSnapshot()) {
+      if (session.status === "active") activeSessionIds.push(session.id);
+    }
+    const result = clearHistory(db, activeSessionIds);
+    // Reset the in-memory model and rehydrate from remaining DB rows
+    model.reset();
+    for (const { rawJson } of listAllEventsRaw(db)) {
+      try {
+        const parsed = JSON.parse(rawJson);
+        model.ingest(parsed);
+      } catch { /* skip corrupt rows */ }
+    }
+    // Broadcast a fresh snapshot to all connected clients
+    hub.broadcast({
+      type: "snapshot",
+      payload: {
+        projects: model.getProjects().map(serializeProject),
+        sessions: model.getSnapshot().map(serializeSession)
+      }
+    });
+    return result;
   });
 
   const sweep = setInterval(() => {

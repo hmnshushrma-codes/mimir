@@ -45,11 +45,13 @@ describe("isEffectAllowed — one gating rule per effect, checked across every s
     }
   });
 
-  it("sweat is allowed only for a long-running working call, needs_permission, or needs_input", () => {
+  it("sweat is allowed for long-running work, needs_*, and error <3", () => {
     expect(isEffectAllowed("sweat", ctx({ state: "working", longRunning: true }))).toBe(true);
     expect(isEffectAllowed("sweat", ctx({ state: "working", longRunning: false }))).toBe(false);
     expect(isEffectAllowed("sweat", ctx({ state: "needs_permission" }))).toBe(true);
     expect(isEffectAllowed("sweat", ctx({ state: "needs_input" }))).toBe(true);
+    expect(isEffectAllowed("sweat", ctx({ state: "error", consecutiveErrors: 1 }))).toBe(true);
+    expect(isEffectAllowed("sweat", ctx({ state: "error", consecutiveErrors: 3 }))).toBe(false);
     expect(isEffectAllowed("sweat", ctx({ state: "stalled" }))).toBe(false);
     expect(isEffectAllowed("sweat", ctx({ state: "thinking" }))).toBe(false);
   });

@@ -42,37 +42,39 @@ export function behaviourFor(ctx: BehaviourContext): Behaviour {
 
   switch (ctx.state) {
     case "working": {
+      // Spec 5.4: work_read — eyes scan left-right, head nods, reading loop
       if (ctx.category === "read") {
         return {
           ...base,
           pose: "sitting",
           activityLoop: "reading",
-          expression: "curious",
+          expression: "focused",
           eyesClosed: false,
           gesture: null,
-          props: props({ showBook: true, monitorContent: "off" }),
+          props: props({ showBook: true, monitorContent: "code" }),
           effects: [],
           speechBubble: null
         };
       }
-      if (ctx.category === "web") {
+      // Spec 5.6: work_run — half-lidded focus, waiting rhythm
+      if (ctx.category === "web" || ctx.category === "shell") {
         return {
           ...base,
           pose: "sitting",
           activityLoop: "listening",
-          expression: "curious",
+          expression: "focused",
           eyesClosed: false,
           gesture: null,
-          props: props({ monitorContent: "dim" }),
-          effects: [],
+          props: props({ monitorContent: "code" }),
+          effects: ctx.longRunning ? ["sweat"] : [],
           speechBubble: null
         };
       }
-      // write / shell / delegate / mcp / other — the "at the keyboard" bucket.
+      // Spec 5.5: work_type — leaned in 3deg, typing, sweat after longRunning
       const effects: EffectName[] = ctx.longRunning ? ["sweat"] : [];
       return {
         ...base,
-        pose: "sitting",
+        pose: "leaning-forward",
         activityLoop: "typing",
         expression: "focused",
         eyesClosed: false,
@@ -83,6 +85,7 @@ export function behaviourFor(ctx: BehaviourContext): Behaviour {
       };
     }
 
+    // Spec 5.3: think — eyes drift up, one brow up, hand to chin briefly
     case "thinking":
       return {
         ...base,
@@ -90,12 +93,13 @@ export function behaviourFor(ctx: BehaviourContext): Behaviour {
         activityLoop: "thinking",
         expression: "curious",
         eyesClosed: false,
-        gesture: null,
+        gesture: { name: "sip-tea", playing: true },
         props: props({ monitorContent: "dim" }),
         effects: ["thought-bubble"],
         speechBubble: null
       };
 
+    // Spec 6: supervise — slightly upright, eyes alternate between helpers
     case "supervising":
       return {
         ...base,
@@ -104,11 +108,13 @@ export function behaviourFor(ctx: BehaviourContext): Behaviour {
         expression: "focused",
         eyesClosed: false,
         gesture: null,
-        props: props({ monitorContent: "code" }),
+        props: props({ monitorContent: "code", showMug: true }),
         effects: [],
         speechBubble: null
       };
 
+    // Spec 7: raise hand — polite, hard to miss, not panicky.
+    // Brow slightly raised (asking, not demanding). Small sweat only.
     case "needs_permission":
       return {
         ...base,
@@ -116,7 +122,7 @@ export function behaviourFor(ctx: BehaviourContext): Behaviour {
         activityLoop: null,
         expression: "pleading",
         eyesClosed: false,
-        gesture: { name: "wave", playing: true },
+        gesture: { name: "raise-hand", playing: true },
         props: props({ signs: { yes: true, no: true }, monitorContent: "dim" }),
         effects: ["sweat"],
         speechBubble: null
@@ -135,21 +141,24 @@ export function behaviourFor(ctx: BehaviourContext): Behaviour {
         speechBubble: { text: "?", optionCount: ctx.needsInputOptionCount }
       };
 
+    // Spec 5.8/5.9/12.7: oops then retry. After 3 failures, calm "regroup"
+    // (deep breath, hands on laptop) — never looks more panicked over time.
     case "error": {
-      const frustrated = ctx.consecutiveErrors >= 3;
+      const regroup = ctx.consecutiveErrors >= 3;
       return {
         ...base,
         pose: "sitting",
         activityLoop: null,
-        expression: frustrated ? "frustrated" : "confused",
+        expression: regroup ? "frustrated" : "worried",
         eyesClosed: false,
-        gesture: { name: frustrated ? "facepalm" : "scratch-head", playing: true },
+        gesture: { name: regroup ? "shrug" : "scratch-head", playing: true },
         props: props({ monitorContent: "off" }),
-        effects: [frustrated ? "steam" : "dizzy-stars"],
+        effects: regroup ? [] : ["sweat"],
         speechBubble: null
       };
     }
 
+    // Spec 5.11: celebrate — pop, cheer/thumbs-up, sparkles, then settle
     case "done": {
       if (ctx.donePhase === 1) {
         return {
@@ -164,6 +173,7 @@ export function behaviourFor(ctx: BehaviourContext): Behaviour {
           speechBubble: null
         };
       }
+      // Settle: back to relaxed with follow-through
       return {
         ...base,
         pose: "leaning-back",
@@ -206,27 +216,10 @@ export function behaviourFor(ctx: BehaviourContext): Behaviour {
       };
 
     case "sleeping":
-      // The foreman never visually sleeps — a long-idle foreman keeps the
-      // same "idle holding phone" look as awaiting_prompt rather than
-      // dozing off, since it's still the active supervisor of the session.
-      if (ctx.isForeman) {
-        return {
-          ...base,
-          pose: "leaning-back",
-          activityLoop: null,
-          expression: "happy",
-          eyesClosed: false,
-          gesture: null,
-          props: props({ monitorContent: "awaiting-prompt", showMug: true, showPhone: true, phonePosition: "in-hand" }),
-          effects: [],
-          speechBubble: null
-        };
-      }
-      // The ONLY state with eyesClosed — see docs/agent-states.md & Face
-      // comment: done/sleeping must never be confusable with each other.
+      // Eyes closed, sitting still, Zzz. Same for foreman and subagents.
       return {
         ...base,
-        pose: "leaning-back",
+        pose: "sitting",
         activityLoop: null,
         expression: "sleepy",
         eyesClosed: true,

@@ -41,8 +41,8 @@ function Eyes({ gaze, closed, seed, reducedMotion }: { gaze: EyeGaze; closed: bo
   if (closed) {
     return (
       <>
-        <path d="M24 0 q6 5 12 0" stroke={INK} strokeWidth={3} fill="none" strokeLinecap="round" transform="translate(6,0)" />
-        <path d="M24 0 q6 5 12 0" stroke={INK} strokeWidth={3} fill="none" strokeLinecap="round" transform="translate(30,0)" />
+        <path d="M11 0 q7 5 14 0" stroke={INK} strokeWidth={2.5} fill="none" strokeLinecap="round" />
+        <path d="M35 0 q7 5 14 0" stroke={INK} strokeWidth={2.5} fill="none" strokeLinecap="round" />
       </>
     );
   }
@@ -50,14 +50,17 @@ function Eyes({ gaze, closed, seed, reducedMotion }: { gaze: EyeGaze; closed: bo
   const animate = gaze === "side-to-side" && !reducedMotion ? { x: [offset.x, -2, 2, 0] } : { x: offset.x, y: offset.y };
   return (
     <>
-      <ellipse cx={18} cy={0} rx={9} ry={9} fill="#fff" />
-      <ellipse cx={42} cy={0} rx={9} ry={9} fill="#fff" />
-      <motion.circle cx={18} cy={0} r={4} fill={INK} animate={animate} transition={{ duration: 1.4, repeat: gaze === "side-to-side" ? Infinity : 0 }} />
-      <motion.circle cx={42} cy={0} r={4} fill={INK} animate={animate} transition={{ duration: 1.4, repeat: gaze === "side-to-side" ? Infinity : 0 }} />
+      <ellipse cx={18} cy={0} rx={7.5} ry={8} fill="#fff" />
+      <ellipse cx={42} cy={0} rx={7.5} ry={8} fill="#fff" />
+      <motion.circle cx={18} cy={0} r={5.5} fill={INK} animate={animate} transition={{ duration: 1.4, repeat: gaze === "side-to-side" ? Infinity : 0 }} />
+      <motion.circle cx={42} cy={0} r={5.5} fill={INK} animate={animate} transition={{ duration: 1.4, repeat: gaze === "side-to-side" ? Infinity : 0 }} />
+      {/* eye shine — small white dot top-right of each pupil for life */}
+      <motion.circle cx={20.5} cy={-2} r={1.5} fill="#fff" animate={animate} transition={{ duration: 1.4, repeat: gaze === "side-to-side" ? Infinity : 0 }} />
+      <motion.circle cx={44.5} cy={-2} r={1.5} fill="#fff" animate={animate} transition={{ duration: 1.4, repeat: gaze === "side-to-side" ? Infinity : 0 }} />
       {!reducedMotion && (
         <>
-          <ellipse cx={18} cy={0} rx={10} ry={10} fill={INK} className="eyelid" style={{ animationDelay: `${seed.blinkDelay}s`, animationDuration: `${seed.blinkInterval}s` }} />
-          <ellipse cx={42} cy={0} rx={10} ry={10} fill={INK} className="eyelid" style={{ animationDelay: `${seed.blinkDelay + 0.04}s`, animationDuration: `${seed.blinkInterval}s` }} />
+          <ellipse cx={18} cy={0} rx={8.5} ry={9} fill={INK} className="eyelid" style={{ animationDelay: `${seed.blinkDelay}s`, animationDuration: `${seed.blinkInterval}s` }} />
+          <ellipse cx={42} cy={0} rx={8.5} ry={9} fill={INK} className="eyelid" style={{ animationDelay: `${seed.blinkDelay + 0.04}s`, animationDuration: `${seed.blinkInterval}s` }} />
         </>
       )}
     </>
@@ -68,12 +71,12 @@ function Eyebrows({ pose }: { pose: EyebrowPose }) {
   const raised = pose === "raised";
   const worried = pose === "worried";
   const lowered = pose === "lowered";
-  const baseY = raised ? -6 : worried ? -2 : lowered ? 4 : 0;
-  const tilt = worried ? 1 : lowered ? -1 : 0;
+  const baseY = raised ? -8 : worried ? -3 : lowered ? 2 : -2;
+  const tilt = worried ? 1.5 : lowered ? -1.5 : 0;
   return (
     <>
-      <path d={`M10 ${baseY - tilt * 3} q9 ${tilt * -4} 18 0`} stroke={INK} strokeWidth={2.5} fill="none" strokeLinecap="round" />
-      <path d={`M34 ${baseY} q9 ${tilt * -4} 18 ${tilt * 3}`} stroke={INK} strokeWidth={2.5} fill="none" strokeLinecap="round" />
+      <path d={`M10 ${baseY - tilt * 3} q9 ${tilt * -4} 18 0`} stroke={INK} strokeWidth={3.5} fill="none" strokeLinecap="round" />
+      <path d={`M34 ${baseY} q9 ${tilt * -4} 18 ${tilt * 3}`} stroke={INK} strokeWidth={3.5} fill="none" strokeLinecap="round" />
     </>
   );
 }
@@ -123,45 +126,63 @@ function Arm({
   side,
   gestureName,
   gesturePlaying,
-  typingPhase,
+  typing,
+  idle,
   seated,
   fill,
-  reducedMotion
+  reducedMotion,
+  seed
 }: {
   side: "L" | "R";
   gestureName: Behaviour["gesture"];
   gesturePlaying: boolean;
-  typingPhase: "left" | "right" | null;
-  /** Seated arms rest bent toward the desk, not hanging straight down
-   *  through it — a straight-down resting arm visually collides with the
-   *  desk surface and reads as a stray extra leg/foot. */
+  /** True when the character is actively typing. */
+  typing: boolean;
+  /** True when the character has no activity loop (resting). */
+  idle: boolean;
   seated: boolean;
   fill: string;
   reducedMotion: boolean;
+  seed: number;
 }) {
   const isLeft = side === "L";
-  // Body ellipse has rx=34 with no outline — an arm merely past that radius
-  // at shoulder height still visually blends into the body (same solid
-  // fill, no border between them). The shoulder needs to clear the body's
-  // full horizontal extent so the arm is a genuinely separate silhouette,
-  // the same way the old (pre-rig) Character.tsx positioned its arms.
   const shoulderX = isLeft ? -40 : 40;
   const shoulderY = -10;
   const gesture = gestureName?.name ? GESTURE_PRESETS[gestureName.name] : null;
   const armAnim = gesture ? (isLeft ? gesture.armL : gesture.armR) : null;
 
-  const restForearmRotate = seated ? -100 : 0;
+  const restForearm = seated ? -100 : 0;
   let upperRotate: number | number[] = 0;
-  let forearmRotate: number | number[] = restForearmRotate;
+  let forearmRotate: number | number[] = restForearm;
+  let upperDuration = 0.4;
+  let forearmDuration = 0.4;
   let repeat: number | undefined;
 
   if (gesturePlaying && armAnim) {
+    // Gesture animation — wave, raise-hand, thumbs-up, etc.
     upperRotate = armAnim.upperRotate;
     forearmRotate = armAnim.forearmRotate;
+    upperDuration = (gesture?.durationMs ?? 400) / 1000;
+    forearmDuration = upperDuration;
     repeat = gesture?.hold ? 0 : Infinity;
-  } else if (typingPhase && !reducedMotion) {
-    const active = (isLeft && typingPhase === "left") || (!isLeft && typingPhase === "right");
-    forearmRotate = active ? [restForearmRotate, restForearmRotate - 8, restForearmRotate] : restForearmRotate;
+  } else if (typing && !reducedMotion) {
+    // Two-handed typing: both arms bounce continuously with offset phase.
+    // Left arm leads on even cycles, right arm leads on odd — creates a
+    // natural alternating keystroke rhythm entirely in Framer Motion
+    // keyframes, no React state needed.
+    const big = restForearm - 16;
+    const small = restForearm - 6;
+    forearmRotate = isLeft
+      ? [restForearm, big, restForearm, small, restForearm]
+      : [restForearm, small, restForearm, big, restForearm];
+    forearmDuration = 0.5;
+    repeat = Infinity;
+  } else if (idle && !reducedMotion && seated) {
+    // Subtle idle sway — arms gently shift, seeded per agent
+    const sway = 5;
+    const offset = isLeft ? sway : -sway;
+    forearmRotate = [restForearm, restForearm + offset, restForearm];
+    forearmDuration = 3 + (seed % 10) / 5; // 3-5s, seeded
     repeat = Infinity;
   }
 
@@ -169,13 +190,13 @@ function Arm({
     <motion.g transform={`translate(${shoulderX},${shoulderY})`}>
       <motion.g
         animate={{ rotate: upperRotate }}
-        transition={{ duration: (gesture?.durationMs ?? 400) / 1000, repeat, ease: "easeInOut" }}
+        transition={{ duration: upperDuration, repeat, ease: "easeInOut" }}
         style={{ transformOrigin: "0px 0px" }}
       >
         <rect x={isLeft ? -7 : 0} y={0} width={14} height={22} rx={7} fill={fill} />
         <motion.g
           animate={{ rotate: forearmRotate }}
-          transition={{ duration: (gesture?.durationMs ?? 400) / 1000, repeat, ease: "easeInOut" }}
+          transition={{ duration: forearmDuration, repeat, ease: "easeInOut" }}
           style={{ transformOrigin: `${isLeft ? -3 : 3}px 20px` }}
         >
           <rect x={isLeft ? -6 : -1} y={18} width={13} height={20} rx={6.5} fill={fill} />
@@ -196,6 +217,10 @@ export interface RiggedCharacterProps {
    *  WorkerDesk) — renders the character only, so the generic desk/props
    *  layer below isn't double-drawn under a hand-drawn one. Default true. */
   renderProps?: boolean;
+  /** False when the caller draws its own arms at the desk z-layer (DeskArms).
+   *  Prevents the "4 hands" bug where RiggedCharacter arms are behind the
+   *  desk AND desk-level arms are in front of it. Default true. */
+  renderArms?: boolean;
 }
 
 /**
@@ -204,18 +229,21 @@ export interface RiggedCharacterProps {
  * never state/mood directly. See behaviourFor.ts for how a real agent's
  * state becomes a Behaviour.
  */
-export function RiggedCharacter({ behaviour, behaviourContext, agentId, scale = 1, reducedMotion = false, renderProps = true }: RiggedCharacterProps) {
+export function RiggedCharacter({ behaviour, behaviourContext, agentId, scale = 1, reducedMotion = false, renderProps = true, renderArms = true }: RiggedCharacterProps) {
   const seed = useMemo(() => idleSeed(agentId), [agentId]);
+  const armSeed = useMemo(() => hashString(agentId), [agentId]);
   const pose = POSE_PRESETS[behaviour.pose];
   const expr = EXPRESSION_PRESETS[behaviour.expression];
   const fill = behaviour.teamColor;
+  const isTyping = behaviour.activityLoop === "typing";
+  const isIdle = behaviour.activityLoop === null;
 
   const breathing = !reducedMotion
     ? { scale: [1, 1.015, 1] }
     : undefined;
 
   return (
-    <svg width={160 * scale} height={160 * scale} viewBox="0 0 160 160">
+    <svg width={160 * scale} height={190 * scale} viewBox="0 -30 160 190" overflow="visible">
       <ellipse cx={80} cy={150} rx={38} ry={6} fill="#000" opacity={0.1} />
 
       {renderProps && <Props props={behaviour.props} pose={behaviour.pose} teamColor={fill} />}
@@ -235,9 +263,13 @@ export function RiggedCharacter({ behaviour, behaviourContext, agentId, scale = 
           <ellipse cx={0} cy={0} rx={34} ry={36} fill={fill} />
           <ellipse cx={0} cy={-6} rx={18} ry={16} fill="#ffffff" opacity={0.15} />
 
-          {/* arms, pivot at shoulder — shoulders sit at body edge */}
-          <Arm side="L" gestureName={behaviour.gesture} gesturePlaying={Boolean(behaviour.gesture?.playing)} typingPhase={behaviour.activityLoop === "typing" ? "left" : null} seated={pose.legPose === "sit"} fill={fill} reducedMotion={reducedMotion} />
-          <Arm side="R" gestureName={behaviour.gesture} gesturePlaying={Boolean(behaviour.gesture?.playing)} typingPhase={behaviour.activityLoop === "typing" ? "right" : null} seated={pose.legPose === "sit"} fill={fill} reducedMotion={reducedMotion} />
+          {/* arms, pivot at shoulder — hidden when desk components draw their own */}
+          {renderArms && (
+            <>
+              <Arm side="L" gestureName={behaviour.gesture} gesturePlaying={Boolean(behaviour.gesture?.playing)} typing={isTyping} idle={isIdle} seated={pose.legPose === "sit"} fill={fill} reducedMotion={reducedMotion} seed={armSeed} />
+              <Arm side="R" gestureName={behaviour.gesture} gesturePlaying={Boolean(behaviour.gesture?.playing)} typing={isTyping} idle={isIdle} seated={pose.legPose === "sit"} fill={fill} reducedMotion={reducedMotion} seed={armSeed} />
+            </>
+          )}
 
           {/* legs: only visible standing/leaning-back */}
           {pose.legPose === "stand" && (
@@ -266,21 +298,10 @@ export function RiggedCharacter({ behaviour, behaviourContext, agentId, scale = 
           >
             <circle cx={0} cy={0} r={30} fill={fill} />
 
-            {/* cap: pivot at head crown; tips forward when sleeping */}
-            <motion.g
-              transform="translate(0,-20)"
-              animate={{ rotate: behaviour.eyesClosed ? 10 : 0 }}
-              transition={{ duration: 0.4 }}
-              style={{ transformOrigin: "0px 6px" }}
-            >
-              <path d="M-21 8 a21 14 0 0 1 42 0 z" fill={behaviour.capColor} stroke={INK} strokeWidth={1.5} />
-              <ellipse cx={14} cy={8} rx={16} ry={4.5} fill={behaviour.capColor} stroke={INK} strokeWidth={1.5} />
-            </motion.g>
-
             <g transform="translate(-30,-4)">
               <Eyes gaze={expr.eyeGaze} closed={behaviour.eyesClosed} seed={seed} reducedMotion={reducedMotion} />
             </g>
-            <g transform="translate(-30,-16)">
+            <g transform="translate(-30,-14)">
               <Eyebrows pose={expr.eyebrows} />
             </g>
             <g transform="translate(-20,12)">

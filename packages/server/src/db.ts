@@ -294,6 +294,51 @@ export function searchEvents(
   return rows.map((row) => ({ ...toEventRecord(row), projectId: row.project_id as string }));
 }
 
+/** Delete all history except events belonging to the given session IDs. */
+export function clearHistory(db: DatabaseSync, keepSessionIds: string[] = []): { deletedEvents: number; deletedSessions: number; deletedProjects: number } {
+  if (keepSessionIds.length > 0) {
+    const placeholders = keepSessionIds.map(() => "?").join(",");
+    const evtResult = db.prepare(`DELETE FROM events WHERE session_id NOT IN (${placeholders})`).run(...keepSessionIds);
+    db.prepare(`DELETE FROM session_recaps WHERE session_id NOT IN (${placeholders})`).run(...keepSessionIds);
+    const sessResult = db.prepare(`DELETE FROM sessions WHERE id NOT IN (${placeholders})`).run(...keepSessionIds);
+    // Delete orphan projects that have no remaining sessions
+    const projResult = db.prepare(`DELETE FROM projects WHERE id NOT IN (SELECT DISTINCT project_id FROM sessions)`).run();
+    db.prepare(`DELETE FROM project_notes WHERE project_id NOT IN (SELECT id FROM projects)`).run();
+    return {
+      deletedEvents: Number(evtResult.changes),
+      deletedSessions: Number(sessResult.changes),
+      deletedProjects: Number(projResult.changes)
+    };
+  }
+  const evtResult = db.prepare(`DELETE FROM events`).run();
+  const sessResult = db.prepare(`DELETE FROM sessions`).run();
+  const projResult = db.prepare(`DELETE FROM projects`).run();
+  db.prepare(`DELETE FROM project_notes`).run();
+  db.prepare(`DELETE FROM session_recaps`).run();
+  return {
+    deletedEvents: Number(evtResult.changes),
+    deletedSessions: Number(sessResult.changes),
+    deletedProjects: Number(projResult.changes)
+  };
+}
+
+/** Purge events, sessions, and projects older than `maxAgeMs` from now.
+ *  Returns the count of deleted events. Called on startup to prevent stale
+ *  sessions from prior days from showing up when someone starts the server. */
+export function purgeOldData(db: DatabaseSync, maxAgeMs: number): number {
+  const cutoff = new Date(Date.now() - maxAgeMs).toISOString();
+  // Delete old events
+  const evtResult = db.prepare(`DELETE FROM events WHERE timestamp < ?`).run(cutoff);
+  // Delete old sessions that have no remaining events
+  db.prepare(`DELETE FROM sessions WHERE id NOT IN (SELECT DISTINCT session_id FROM events)`).run();
+  // Delete orphan recaps
+  db.prepare(`DELETE FROM session_recaps WHERE session_id NOT IN (SELECT id FROM sessions)`).run();
+  // Delete orphan projects
+  db.prepare(`DELETE FROM projects WHERE id NOT IN (SELECT DISTINCT project_id FROM sessions)`).run();
+  db.prepare(`DELETE FROM project_notes WHERE project_id NOT IN (SELECT id FROM projects)`).run();
+  return Number(evtResult.changes);
+}
+
 /** Returns all stored events ordered by id (insertion order), for replay.
  *  Only the raw_json column is needed — the model re-derives everything. */
 export function listAllEventsRaw(db: DatabaseSync): Array<{ rawJson: string }> {

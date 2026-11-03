@@ -39,19 +39,19 @@ const REST: ArmAnimation = { upperRotate: [0], forearmRotate: [0] };
 export const GESTURE_PRESETS: Record<GestureName, GesturePreset> = {
   wave: {
     label: "Wave",
-    durationMs: 900,
+    durationMs: 800,
     armL: REST,
-    armR: { upperRotate: [-70, -70, -70], forearmRotate: [0, -25, 0] },
-    headRotate: null,
+    armR: { upperRotate: [-70, -70, -70, -70], forearmRotate: [0, -30, 10, -25] },
+    headRotate: [0, 3, -3, 0],
     hold: false
   },
   "raise-hand": {
     label: "Raise hand",
-    durationMs: 400,
+    durationMs: 600,
     armL: REST,
-    armR: { upperRotate: [0, -110], forearmRotate: [0, 0] },
-    headRotate: null,
-    hold: true
+    armR: { upperRotate: [0, -120, -115, -120], forearmRotate: [0, -10, 5, -10] },
+    headRotate: [0, 5, 0],
+    hold: false
   },
   "nod-yes": {
     label: "Nod yes",
@@ -110,11 +110,11 @@ export const GESTURE_PRESETS: Record<GestureName, GesturePreset> = {
     hold: false
   },
   "sip-tea": {
-    label: "Sip tea",
-    durationMs: 800,
+    label: "Chin think",
+    durationMs: 2400,
     armL: REST,
-    armR: { upperRotate: [0, -90], forearmRotate: [0, -110] },
-    headRotate: [0, -5],
+    armR: { upperRotate: [0, -80, -80, 0], forearmRotate: [0, -100, -95, 0] },
+    headRotate: [0, -3, 3, 0],
     hold: false
   },
   "drum-fingers": {
