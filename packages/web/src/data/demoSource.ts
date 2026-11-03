@@ -1,6 +1,6 @@
 import { WorkshopModel, serializeAgent, serializeProject, serializeSession, type HookEventEnvelope } from "@agent-workshop/shared";
 import { useWorkshopStore } from "../store/useWorkshopStore.js";
-import { DEMO_STEPS, DEMO_TOTAL_DURATION_MS } from "./demoScenario.js";
+import { DEMO_STEPS, DEMO_TOTAL_DURATION_MS, STRESS_STEPS, STRESS_TOTAL_DURATION_MS } from "./demoScenario.js";
 
 const SWEEP_INTERVAL_MS = 500;
 const DEPART_AFTER_MS = 4000;
@@ -8,19 +8,24 @@ const IDLE_MS = 6000;
 const STALE_MS = 60_000;
 const SESSION_IDLE_MS = 30_000;
 const SESSION_ENDED_MS = 120_000;
-// Real deployments default to 15s; the demo uses a much shorter threshold so
-// the "concentrating" mood is actually reachable within a short loop — see
-// demoScenario.ts's s1-a1-long step, which runs ~6.4s.
-const DEMO_LONG_TOOL_CALL_MS = 4000;
 
 /**
  * Plays the scripted multi-session demo event stream through the exact same
  * WorkshopModel.ingest() path the real collector server uses — demo mode
- * exercises the real normalizer, state machine, and mood derivation, not a
- * UI-only mock. One model instance serves all 3 demo sessions, exactly as
- * the real collector serves all real sessions.
+ * exercises the real normalizer and state machine, not a UI-only mock. One
+ * model instance serves all 3 demo sessions, exactly as the real collector
+ * serves all real sessions.
  */
+function isStressMode(): boolean {
+  if (typeof window === "undefined") return false;
+  return new URLSearchParams(window.location.search).get("stress") === "1";
+}
+
 export function connectDemoSource(): () => void {
+  const stress = isStressMode();
+  const steps = stress ? STRESS_STEPS : DEMO_STEPS;
+  const totalDurationMs = stress ? STRESS_TOTAL_DURATION_MS : DEMO_TOTAL_DURATION_MS;
+
   const timers: ReturnType<typeof setTimeout>[] = [];
   let sweepTimer: ReturnType<typeof setInterval> | null = null;
   let stopped = false;
@@ -33,7 +38,7 @@ export function connectDemoSource(): () => void {
     if (stopped) return;
     loopCount += 1;
     const sessionSuffix = `-l${loopCount}`;
-    const model = new WorkshopModel(DEMO_LONG_TOOL_CALL_MS);
+    const model = new WorkshopModel();
 
     if (sweepTimer) clearInterval(sweepTimer);
     sweepTimer = setInterval(() => {
@@ -56,7 +61,7 @@ export function connectDemoSource(): () => void {
       }
     }, SWEEP_INTERVAL_MS);
 
-    for (const step of DEMO_STEPS) {
+    for (const step of steps) {
       const timer = setTimeout(() => {
         const envelope = {
           ...step.payload,
@@ -72,7 +77,7 @@ export function connectDemoSource(): () => void {
     const loopTimer = setTimeout(() => {
       useWorkshopStore.getState().applySnapshot({ projects: [], sessions: [] });
       playOnce();
-    }, DEMO_TOTAL_DURATION_MS);
+    }, totalDurationMs);
     timers.push(loopTimer);
   }
 

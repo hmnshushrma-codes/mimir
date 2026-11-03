@@ -1,6 +1,5 @@
 import {
   DEFAULT_DISPLAY_STATE_CONFIG,
-  DEFAULT_LONG_TOOL_CALL_MS,
   HookEventEnvelopeSchema,
   MAIN_AGENT_ID,
   WorkshopModel,
@@ -56,7 +55,7 @@ export function buildReplaySummary(
   asOfIso: string,
   config: DisplayStateConfig = DEFAULT_DISPLAY_STATE_CONFIG
 ): ReplayAgentSummary[] {
-  const model = new WorkshopModel(DEFAULT_LONG_TOOL_CALL_MS, config);
+  const model = new WorkshopModel(config);
   const timelines = new Map<string, AgentTimeline>();
 
   for (const row of rawRows) {

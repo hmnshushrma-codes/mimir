@@ -1,19 +1,21 @@
 import { useState } from "react";
 import { motion } from "framer-motion";
 import type { SerializedAgent } from "@agent-workshop/shared";
-import { Character } from "../characters/Character.js";
+import { RiggedCharacter } from "../rig/RiggedCharacter.js";
+import { useStableBehaviour } from "../rig/useStableBehaviour.js";
+import { buildBehaviourContext } from "../rig/agentBehaviourContext.js";
+import { contrastCapColor } from "../characters/colorUtils.js";
+import type { PropsConfig } from "../rig/types.js";
 import { nameFor } from "../characters/names.js";
 import { roleLabel } from "../characters/faceFeatures.js";
 import { classifyAgentVisibility } from "../characters/agentVisibility.js";
 import { usePrefersDarkMode } from "../hooks/usePrefersDarkMode.js";
-import { useIsDaytime } from "../hooks/useTimeOfDay.js";
-import { getProfile, moodToState, type CharacterProfile } from "../characters/characterProfiles.js";
 import { AgentTooltip } from "./AgentTooltip.js";
 import { StateLabel } from "./StateLabel.js";
 import { useWorkshopStore } from "../store/useWorkshopStore.js";
 
-function WorkerMonitor({ profile, teamColor, monitorBg }: {
-  profile: CharacterProfile; teamColor: string; monitorBg: string;
+function WorkerMonitor({ monitorContent, teamColor, monitorBg }: {
+  monitorContent: PropsConfig["monitorContent"]; teamColor: string; monitorBg: string;
 }) {
   return (
     <g>
@@ -21,7 +23,7 @@ function WorkerMonitor({ profile, teamColor, monitorBg }: {
       <rect x="63" y="112" width="8" height="6" fill="#555" />
       <rect x="57" y="117" width="20" height="2" rx="1" fill="#555" />
 
-      {profile.monitorState === "code-scrolling" && (
+      {monitorContent === "code" && (
         <g transform="translate(50,82)">
           <rect x="3" y="5" width="22" height="1.5" rx="0.5" fill={teamColor} opacity="0.5" />
           <rect x="6" y="9" width="18" height="1.5" rx="0.5" fill={teamColor} opacity="0.4" />
@@ -30,14 +32,18 @@ function WorkerMonitor({ profile, teamColor, monitorBg }: {
           <rect x="6" y="21" width="16" height="1.5" rx="0.5" fill={teamColor} opacity="0.35" />
         </g>
       )}
-      {profile.monitorState === "error-text" && (
+      {monitorContent === "book-page" && (
         <g transform="translate(50,82)">
-          <rect x="3" y="8" width="28" height="1.5" rx="0.5" fill="#e34948" opacity="0.6" />
-          <rect x="3" y="14" width="20" height="1.5" rx="0.5" fill="#e34948" opacity="0.4" />
-          <rect x="3" y="20" width="14" height="1.5" rx="0.5" fill="#e34948" opacity="0.3" />
+          <rect x="3" y="2" width="28" height="22" rx="1" fill="#fff" opacity="0.1" />
         </g>
       )}
-      {(profile.monitorState === "dim" || profile.monitorState === "cursor-blinking") && (
+      {monitorContent === "done-check" && (
+        <g transform="translate(67,95)">
+          <circle r="8" fill={teamColor} opacity="0.25" />
+          <path d="M-4 0 L-1 3.5 L4.5 -4.5" stroke={teamColor} strokeWidth="2" fill="none" strokeLinecap="round" strokeLinejoin="round" />
+        </g>
+      )}
+      {(monitorContent === "dim" || monitorContent === "awaiting-prompt") && (
         <g transform="translate(50,82)">
           <rect x="3" y="14" width="5" height="1.5" rx="0.5" fill={teamColor} opacity="0.12" />
         </g>
@@ -59,38 +65,27 @@ function WorkerLamp({ on, isDark }: { on: boolean; isDark: boolean }) {
   );
 }
 
-function ZzzFromHead({ isDark, reducedMotion }: { isDark: boolean; reducedMotion: boolean }) {
-  const color = isDark ? "#888" : "#aaa";
-  if (reducedMotion) {
-    return (
-      <g>
-        <text x="105" y="55" fill={color} fontSize="10" fontWeight="700" opacity="0.6">Z</text>
-        <text x="115" y="46" fill={color} fontSize="8" fontWeight="700" opacity="0.4">z</text>
-        <text x="122" y="40" fill={color} fontSize="6" fontWeight="700" opacity="0.25">z</text>
-      </g>
-    );
-  }
+function Signs({ yes, no }: { yes: boolean; no: boolean }) {
   return (
-    <g>
-      <text x="105" y="55" fill={color} fontSize="10" fontWeight="700" opacity="0.7">
-        Z<animate attributeName="y" values="55;45;55" dur="2s" repeatCount="indefinite" />
-        <animate attributeName="opacity" values="0.7;0.2;0.7" dur="2s" repeatCount="indefinite" />
-      </text>
-      <text x="115" y="46" fill={color} fontSize="8" fontWeight="700" opacity="0.5">
-        z<animate attributeName="y" values="46;38;46" dur="2.2s" repeatCount="indefinite" />
-        <animate attributeName="opacity" values="0.5;0.1;0.5" dur="2.2s" repeatCount="indefinite" />
-      </text>
-      <text x="122" y="40" fill={color} fontSize="6" fontWeight="700" opacity="0.3">
-        z<animate attributeName="y" values="40;34;40" dur="2.5s" repeatCount="indefinite" />
-        <animate attributeName="opacity" values="0.3;0.05;0.3" dur="2.5s" repeatCount="indefinite" />
-      </text>
+    <g transform="translate(34, 58)">
+      {yes && (
+        <g>
+          <rect x="0" y="0" width="22" height="15" rx="2" fill="#1baf7a" stroke="#fff" strokeWidth="1" />
+          <text x="11" y="11" textAnchor="middle" fontSize="8" fontWeight="700" fill="#fff">YES</text>
+        </g>
+      )}
+      {no && (
+        <g transform="translate(60,0)">
+          <rect x="0" y="0" width="22" height="15" rx="2" fill="#e34948" stroke="#fff" strokeWidth="1" />
+          <text x="11" y="11" textAnchor="middle" fontSize="8" fontWeight="700" fill="#fff">NO</text>
+        </g>
+      )}
     </g>
   );
 }
 
 export interface WorkerDeskProps {
   agent: SerializedAgent;
-  sessionId: string;
   teamColor: string;
   selected: boolean;
   onSelect: () => void;
@@ -99,19 +94,20 @@ export interface WorkerDeskProps {
 }
 
 export function WorkerDesk({
-  agent, sessionId, teamColor, selected, onSelect, reducedMotion, nowMs
+  agent, teamColor, selected, onSelect, reducedMotion, nowMs
 }: WorkerDeskProps) {
   const [hovered, setHovered] = useState(false);
   const isDark = usePrefersDarkMode();
-  const daytime = useIsDaytime();
   const debugOverlayEnabled = useWorkshopStore((s) => s.debugOverlayEnabled);
   const visibility = classifyAgentVisibility(agent, nowMs);
   const finished = visibility === "finished";
+  const capColor = contrastCapColor(teamColor);
 
-  const hasActiveTool = agent.activeToolCalls.length > 0;
-  const charState = moodToState(agent.mood, false, hasActiveTool, agent.state.leaving);
-  const profile = getProfile("agent", charState);
-  const lampOn = (!daytime || !profile.lampDim) && !profile.lampDim;
+  const behaviourContext = buildBehaviourContext(agent, { isForeman: false, teamColor, capColor, nowMs });
+  const behaviour = useStableBehaviour(behaviourContext);
+  // A resting (sleeping) worker's lamp is off regardless of time of day —
+  // mirrors the old profile system's lampDim semantics for a dormant agent.
+  const lampOn = !behaviour.props.lampDim;
 
   const deskColor = isDark ? "#332c24" : "#8e7050";
   const deskTop = isDark ? "#423a30" : "#a88860";
@@ -119,7 +115,7 @@ export function WorkerDesk({
 
   const activity = agent.activeToolCalls[0];
   const activityLabel = activity
-    ? `${activity.toolName} \u00b7 ${activity.target ?? "\u2026"}`
+    ? `${activity.toolName} · ${activity.target ?? "…"}`
     : agent.displayState === "needs_permission" ? "waiting for permission" : null;
 
   return (
@@ -140,9 +136,11 @@ export function WorkerDesk({
       <svg width="150" height="220" viewBox="0 0 150 220">
         {/* Layer 1: Character */}
         <g transform="translate(36,18) scale(0.6)">
-          <Character
-            agentId={agent.id} agentType={agent.agentType} sessionId={sessionId}
-            isForeman={false} mood={agent.mood} category={agent.activeToolCalls[0]?.category ?? null}
+          <RiggedCharacter
+            behaviour={behaviour}
+            behaviourContext={behaviourContext}
+            agentId={agent.id}
+            renderProps={false}
             reducedMotion={reducedMotion}
           />
         </g>
@@ -150,11 +148,15 @@ export function WorkerDesk({
         {/* Layer 2: Desk surface + monitor + props */}
         <rect x="12" y="118" width="126" height="8" rx="3" fill={deskTop} />
 
-        <WorkerMonitor profile={profile} teamColor={teamColor} monitorBg={monitorBg} />
+        <WorkerMonitor monitorContent={behaviour.props.monitorContent} teamColor={teamColor} monitorBg={monitorBg} />
         <WorkerLamp on={lampOn} isDark={isDark} />
 
-        {/* Typing hands — only when profile says so */}
-        {profile.showTypingHands && !reducedMotion && (
+        {/* YES/NO permission signs */}
+        {behaviour.props.signs && <Signs yes={behaviour.props.signs.yes} no={behaviour.props.signs.no} />}
+
+        {/* Typing hands — decorative overlay, since the character's own arms
+            sit behind the desk front panel at this z-order. */}
+        {behaviour.activityLoop === "typing" && !reducedMotion && (
           <g>
             <rect x="56" y="116" width="5" height="3" rx="1.5" fill={teamColor} opacity="0.45">
               <animate attributeName="y" values="116;114;116" dur="0.45s" repeatCount="indefinite" />
@@ -162,17 +164,6 @@ export function WorkerDesk({
             <rect x="76" y="116" width="5" height="3" rx="1.5" fill={teamColor} opacity="0.45">
               <animate attributeName="y" values="116;114;116" dur="0.38s" repeatCount="indefinite" />
             </rect>
-          </g>
-        )}
-
-        {/* Zzz from head — ONLY when sleeping */}
-        {profile.showZzz && <ZzzFromHead isDark={isDark} reducedMotion={reducedMotion} />}
-
-        {/* Error badge */}
-        {profile.showErrorBadge && (
-          <g>
-            <circle cx="130" cy="70" r="6" fill="#e34948" opacity="0.85" />
-            <text x="130" y="74" textAnchor="middle" fill="#fff" fontSize="9" fontWeight="700">!</text>
           </g>
         )}
 

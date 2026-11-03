@@ -14,7 +14,6 @@ function agent(overrides: Partial<SerializedAgent> = {}): SerializedAgent {
     presence: "active",
     displayState: "thinking",
     displayReason: "",
-    mood: "sleepy",
     consecutiveErrors: 0,
     lastEventAt: "T0",
     activeToolCalls: [],

@@ -84,7 +84,7 @@ export function WorkshopView() {
   const endedSessions = useMemo(() => visibleSessions.filter((s) => s.status === "ended"), [visibleSessions]);
 
   const sortedLiveSessions = useMemo(
-    () => sortByAttention(liveSessions, (s) => s.agents.map((a) => a.mood)),
+    () => sortByAttention(liveSessions, (s) => s.agents.map((a) => a.displayState)),
     [liveSessions]
   );
 

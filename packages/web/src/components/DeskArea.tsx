@@ -54,20 +54,21 @@ export function DeskArea({
 
   const delegatingAgentIds = useMemo(() => {
     const ids = new Set<string>();
-    if (main?.mood === "excited" && main.activeToolCalls[0]?.category === "delegate") {
+    const mainDelegating = main?.displayState === "working" && main.activeToolCalls[0]?.category === "delegate";
+    if (mainDelegating) {
       for (const a of active) ids.add(a.id);
     }
     for (const a of active) {
-      if (a.mood === "excited" && a.activeToolCalls[0]?.category === "delegate") ids.add(a.id);
+      if (a.displayState === "working" && a.activeToolCalls[0]?.category === "delegate") ids.add(a.id);
     }
     return ids;
   }, [active, main]);
 
-  // Agents that just finished — proud mood = result blob goes back to foreman
+  // Agents that just finished — "done" = result blob goes back to foreman
   const returningAgentIds = useMemo(() => {
     const ids = new Set<string>();
     for (const a of [...active, ...finished]) {
-      if (a.mood === "proud") ids.add(a.id);
+      if (a.displayState === "done") ids.add(a.id);
     }
     return ids;
   }, [active, finished]);
@@ -101,7 +102,6 @@ export function DeskArea({
           <div ref={foremanRef} className="desk-area-foreman">
             <ForemanDesk
               agent={main}
-              sessionId={session.id}
               teamColor={teamColor}
               projectName={projectName}
               branch={session.branch}
@@ -125,7 +125,6 @@ export function DeskArea({
               >
                 <WorkerDesk
                   agent={agent}
-                  sessionId={session.id}
                   teamColor={teamColor}
                   selected={selectedAgentId === agent.id}
                   onSelect={() => onSelectAgent(agent.id)}
@@ -150,7 +149,6 @@ export function DeskArea({
               <div key={agent.id} className="desk-area-worker-slot">
                 <WorkerDesk
                   agent={agent}
-                  sessionId={session.id}
                   teamColor={teamColor}
                   selected={selectedAgentId === agent.id}
                   onSelect={() => onSelectAgent(agent.id)}

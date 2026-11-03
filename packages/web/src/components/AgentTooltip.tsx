@@ -48,7 +48,7 @@ export function AgentTooltip({ agent, latestPrompt, nowMs }: AgentTooltipProps) 
 
       {/* Status */}
       <div className="agent-tooltip-section">
-        <span className="agent-tooltip-label">Status:</span> {agent.mood}
+        <span className="agent-tooltip-label">Status:</span> {agent.displayState}
         {startedAt && (
           <>
             {" · "}

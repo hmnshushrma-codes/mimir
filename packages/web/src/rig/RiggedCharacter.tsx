@@ -192,6 +192,10 @@ export interface RiggedCharacterProps {
   agentId: string;
   scale?: number;
   reducedMotion?: boolean;
+  /** False when the caller draws its own desk/monitor/lamp (ForemanDesk,
+   *  WorkerDesk) — renders the character only, so the generic desk/props
+   *  layer below isn't double-drawn under a hand-drawn one. Default true. */
+  renderProps?: boolean;
 }
 
 /**
@@ -200,7 +204,7 @@ export interface RiggedCharacterProps {
  * never state/mood directly. See behaviourFor.ts for how a real agent's
  * state becomes a Behaviour.
  */
-export function RiggedCharacter({ behaviour, behaviourContext, agentId, scale = 1, reducedMotion = false }: RiggedCharacterProps) {
+export function RiggedCharacter({ behaviour, behaviourContext, agentId, scale = 1, reducedMotion = false, renderProps = true }: RiggedCharacterProps) {
   const seed = useMemo(() => idleSeed(agentId), [agentId]);
   const pose = POSE_PRESETS[behaviour.pose];
   const expr = EXPRESSION_PRESETS[behaviour.expression];
@@ -214,7 +218,7 @@ export function RiggedCharacter({ behaviour, behaviourContext, agentId, scale = 
     <svg width={160 * scale} height={160 * scale} viewBox="0 0 160 160">
       <ellipse cx={80} cy={150} rx={38} ry={6} fill="#000" opacity={0.1} />
 
-      <Props props={behaviour.props} pose={behaviour.pose} teamColor={fill} />
+      {renderProps && <Props props={behaviour.props} pose={behaviour.pose} teamColor={fill} />}
 
       {/* root: position/jump */}
       <motion.g

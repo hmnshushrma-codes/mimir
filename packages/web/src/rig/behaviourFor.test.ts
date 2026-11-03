@@ -112,6 +112,26 @@ describe("behaviourFor — one case per table row", () => {
     expect(b.expression).toBe("sleepy");
     expect(b.eyesClosed).toBe(true);
     expect(b.effects).toEqual(["zzz"]);
+    expect(b.props.lampDim).toBe(true);
+  });
+
+  it("foreman never sleeps — sleeping renders the same idle-with-phone look as awaiting_prompt", () => {
+    const sleeping = behaviourFor(ctx({ state: "sleeping", isForeman: true }));
+    const awaitingPrompt = behaviourFor(ctx({ state: "awaiting_prompt", isForeman: true }));
+    expect(sleeping.eyesClosed).toBe(false);
+    expect(sleeping.effects).not.toContain("zzz");
+    expect(sleeping.props.showPhone).toBe(true);
+    expect(sleeping.props.phonePosition).toBe("in-hand");
+    expect(sleeping.props.lampDim).toBe(false);
+    expect(sleeping.pose).toBe(awaitingPrompt.pose);
+    expect(sleeping.expression).toBe(awaitingPrompt.expression);
+  });
+
+  it("awaiting_prompt only shows the phone for the foreman, not subagents", () => {
+    const foreman = behaviourFor(ctx({ state: "awaiting_prompt", isForeman: true }));
+    const subagent = behaviourFor(ctx({ state: "awaiting_prompt", isForeman: false }));
+    expect(foreman.props.showPhone).toBe(true);
+    expect(subagent.props.showPhone).toBe(false);
   });
 
   it("stalled -> no effects (sweat is not allowlisted for stalled)", () => {

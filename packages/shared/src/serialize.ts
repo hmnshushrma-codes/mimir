@@ -11,7 +11,6 @@ export interface SerializedAgent {
   presence: AgentRecord["presence"];
   displayState: AgentRecord["displayState"];
   displayReason: string;
-  mood: AgentRecord["mood"];
   consecutiveErrors: number;
   lastEventAt: string;
   activeToolCalls: ToolCallRecord[];
@@ -50,7 +49,6 @@ export function serializeAgent(agent: AgentRecord): SerializedAgent {
     presence: agent.presence,
     displayState: agent.displayState,
     displayReason: agent.displayReason,
-    mood: agent.mood,
     consecutiveErrors: agent.consecutiveErrors,
     lastEventAt: agent.lastEventAt,
     activeToolCalls: Array.from(agent.activeToolCalls.values()),
