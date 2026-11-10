@@ -6,10 +6,11 @@ import { SplashScreen } from "./components/SplashScreen.js";
 import { DebugView } from "./views/DebugView.js";
 import { WorkshopView } from "./views/WorkshopView.js";
 import { DashboardView } from "./views/DashboardView.js";
+import { AnalyticsView } from "./views/AnalyticsView.js";
 
 const API_BASE = window.location.origin;
 
-type Tab = "workshop" | "dashboard" | "debug";
+type Tab = "workshop" | "dashboard" | "analytics" | "debug";
 
 const BASE_TITLE = "Mimir";
 
@@ -66,6 +67,9 @@ export function App() {
           <button className={`tab-button ${tab === "dashboard" ? "active" : ""}`} onClick={() => setTab("dashboard")}>
             Dashboard
           </button>
+          <button className={`tab-button ${tab === "analytics" ? "active" : ""}`} onClick={() => setTab("analytics")}>
+            Analytics
+          </button>
           <button className={`tab-button ${tab === "debug" ? "active" : ""}`} onClick={() => setTab("debug")}>
             Debug
           </button>
@@ -96,6 +100,7 @@ export function App() {
       <main className="main-content">
         {tab === "workshop" && <WorkshopView />}
         {tab === "dashboard" && <DashboardView onOpenProject={openProjectInWorkshop} onOpenSession={openSessionInWorkshop} />}
+        {tab === "analytics" && <AnalyticsView />}
         {tab === "debug" && <DebugView />}
       </main>
     </div>

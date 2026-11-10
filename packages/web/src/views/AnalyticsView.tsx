@@ -1,0 +1,545 @@
+import { useEffect, useMemo, useState } from "react";
+import type {
+  SessionAnalytics,
+  ToolSummary,
+  PermissionEvent,
+  PromptAssessment,
+  WasteFinding,
+} from "@agent-workshop/shared";
+import {
+  EMPTY_TOKEN_USAGE,
+  assessPrompt,
+  formatCost,
+  calculateCost,
+  PricingRegistry,
+  detectWaste,
+  generatePromptRecommendation,
+} from "@agent-workshop/shared";
+import { useWorkshopStore } from "../store/useWorkshopStore.js";
+
+const API = window.location.origin;
+
+type SubTab = "overview" | "tools" | "agents" | "timeline" | "compare" | "permissions" | "prompts";
+
+interface StoredSessionAnalytics {
+  sessionId: string;
+  projectId: string;
+  startedAt: string;
+  endedAt: string | null;
+  durationMs: number | null;
+  agentCount: number;
+  subagentCount: number;
+  toolCallCount: number;
+  successfulToolCalls: number;
+  failedToolCalls: number;
+  permissionRequests: number;
+  prompt: string | null;
+  computedAt: string;
+}
+
+interface ToolSummaryRow {
+  toolName: string;
+  category: string;
+  totalCalls: number;
+  successCount: number;
+  failureCount: number;
+  retryCount: number;
+  avgDurationMs: number | null;
+  maxDurationMs: number | null;
+}
+
+interface StoredPermissionEvent {
+  id: string;
+  sessionId: string;
+  agentId: string;
+  toolName: string | null;
+  commandPreview: string | null;
+  requestedAt: string;
+  decidedAt: string | null;
+  decision: string;
+  waitingDurationMs: number | null;
+  requestType: string;
+}
+
+function formatDuration(ms: number | null): string {
+  if (ms === null) return "—";
+  if (ms < 1000) return `${ms}ms`;
+  if (ms < 60000) return `${(ms / 1000).toFixed(1)}s`;
+  return `${(ms / 60000).toFixed(1)}m`;
+}
+
+function formatTime(iso: string): string {
+  return new Date(iso).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+}
+
+// ─── Overview ───────────────────────────────────────────────────────
+
+function OverviewPanel({ sessions }: { sessions: StoredSessionAnalytics[] }) {
+  const totalToolCalls = sessions.reduce((s, a) => s + a.toolCallCount, 0);
+  const totalFailed = sessions.reduce((s, a) => s + a.failedToolCalls, 0);
+  const totalAgents = sessions.reduce((s, a) => s + a.agentCount, 0);
+  const totalDuration = sessions.reduce((s, a) => s + (a.durationMs ?? 0), 0);
+  const perms = sessions.reduce((s, a) => s + a.permissionRequests, 0);
+
+  return (
+    <div className="analytics-grid">
+      <div className="analytics-card">
+        <div className="analytics-card-value">{sessions.length}</div>
+        <div className="analytics-card-label">Sessions</div>
+      </div>
+      <div className="analytics-card">
+        <div className="analytics-card-value">{totalAgents}</div>
+        <div className="analytics-card-label">Agents</div>
+      </div>
+      <div className="analytics-card">
+        <div className="analytics-card-value">{totalToolCalls}</div>
+        <div className="analytics-card-label">Tool Calls</div>
+      </div>
+      <div className="analytics-card">
+        <div className="analytics-card-value">{totalFailed}</div>
+        <div className="analytics-card-label">Failed</div>
+      </div>
+      <div className="analytics-card">
+        <div className="analytics-card-value">{perms}</div>
+        <div className="analytics-card-label">Permissions</div>
+      </div>
+      <div className="analytics-card">
+        <div className="analytics-card-value">{formatDuration(totalDuration)}</div>
+        <div className="analytics-card-label">Total Time</div>
+      </div>
+
+      <div className="analytics-section">
+        <h3>Sessions</h3>
+        <table className="analytics-table">
+          <thead>
+            <tr>
+              <th>Session</th>
+              <th>Agents</th>
+              <th>Tools</th>
+              <th>Failed</th>
+              <th>Duration</th>
+              <th>Started</th>
+            </tr>
+          </thead>
+          <tbody>
+            {sessions.map((s) => (
+              <tr key={s.sessionId}>
+                <td title={s.sessionId}>{s.sessionId.slice(0, 8)}…</td>
+                <td>{s.agentCount}</td>
+                <td>{s.toolCallCount}</td>
+                <td>{s.failedToolCalls}</td>
+                <td>{formatDuration(s.durationMs)}</td>
+                <td>{formatTime(s.startedAt)}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  );
+}
+
+// ─── Tools ──────────────────────────────────────────────────────────
+
+function ToolsPanel({ summaries }: { summaries: ToolSummaryRow[] }) {
+  return (
+    <div className="analytics-section">
+      <h3>Tool Usage Summary</h3>
+      {summaries.length === 0 ? (
+        <p className="analytics-empty">No tool data yet</p>
+      ) : (
+        <table className="analytics-table">
+          <thead>
+            <tr>
+              <th>Tool</th>
+              <th>Category</th>
+              <th>Calls</th>
+              <th>Success</th>
+              <th>Failed</th>
+              <th>Retries</th>
+              <th>Avg Duration</th>
+              <th>Max Duration</th>
+            </tr>
+          </thead>
+          <tbody>
+            {summaries.map((s) => (
+              <tr key={s.toolName}>
+                <td>{s.toolName}</td>
+                <td>{s.category}</td>
+                <td>{s.totalCalls}</td>
+                <td>{s.successCount}</td>
+                <td>{s.failureCount}</td>
+                <td>{s.retryCount}</td>
+                <td>{formatDuration(s.avgDurationMs)}</td>
+                <td>{formatDuration(s.maxDurationMs)}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      )}
+    </div>
+  );
+}
+
+// ─── Permissions ────────────────────────────────────────────────────
+
+function PermissionsPanel({ events }: { events: StoredPermissionEvent[] }) {
+  const pending = events.filter((e) => e.decision === "pending");
+  const resolved = events.filter((e) => e.decision !== "pending");
+
+  return (
+    <div className="analytics-section">
+      {pending.length > 0 && (
+        <>
+          <h3>Pending ({pending.length})</h3>
+          <table className="analytics-table">
+            <thead><tr><th>Agent</th><th>Type</th><th>Tool</th><th>Requested</th></tr></thead>
+            <tbody>
+              {pending.map((p) => (
+                <tr key={p.id}>
+                  <td>{p.agentId.slice(0, 10)}</td>
+                  <td>{p.requestType}</td>
+                  <td>{p.toolName ?? "—"}</td>
+                  <td>{formatTime(p.requestedAt)}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </>
+      )}
+      <h3>Permission History ({resolved.length})</h3>
+      {resolved.length === 0 ? (
+        <p className="analytics-empty">No permission events yet</p>
+      ) : (
+        <table className="analytics-table">
+          <thead><tr><th>Agent</th><th>Decision</th><th>Wait</th><th>Type</th><th>Time</th></tr></thead>
+          <tbody>
+            {resolved.map((p) => (
+              <tr key={p.id}>
+                <td>{p.agentId.slice(0, 10)}</td>
+                <td className={`perm-${p.decision}`}>{p.decision}</td>
+                <td>{formatDuration(p.waitingDurationMs)}</td>
+                <td>{p.requestType}</td>
+                <td>{formatTime(p.requestedAt)}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      )}
+    </div>
+  );
+}
+
+// ─── Prompts ────────────────────────────────────────────────────────
+
+function PromptsPanel({ sessions }: { sessions: StoredSessionAnalytics[] }) {
+  const promptSessions = sessions.filter((s) => s.prompt);
+  if (promptSessions.length === 0) {
+    return <p className="analytics-empty">No prompts captured yet</p>;
+  }
+
+  return (
+    <div className="analytics-section">
+      <h3>Prompt Quality</h3>
+      {promptSessions.map((s) => {
+        const assessment = assessPrompt(s.sessionId, s.prompt!);
+        return (
+          <div key={s.sessionId} className="prompt-card">
+            <div className="prompt-card-header">
+              <span className="prompt-score" data-score={assessment.overallScore > 60 ? "good" : assessment.overallScore > 35 ? "fair" : "poor"}>
+                {assessment.overallScore}/100
+              </span>
+              <span className="prompt-text">{s.prompt!.slice(0, 100)}{s.prompt!.length > 100 ? "…" : ""}</span>
+            </div>
+            {assessment.missingRequirements.length > 0 && (
+              <div className="prompt-issues">
+                <strong>Missing:</strong>
+                <ul>
+                  {assessment.missingRequirements.map((m, i) => <li key={i}>{m}</li>)}
+                </ul>
+              </div>
+            )}
+            {assessment.suggestedImprovements.length > 0 && (
+              <div className="prompt-suggestions">
+                <strong>Suggestions:</strong>
+                <ul>
+                  {assessment.suggestedImprovements.slice(0, 3).map((s, i) => <li key={i}>{s}</li>)}
+                </ul>
+              </div>
+            )}
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
+// ─── Agents ─────────────────────────────────────────────────────────
+
+interface StoredToolCallAnalytics {
+  toolUseId: string;
+  sessionId: string;
+  agentId: string;
+  toolName: string;
+  category: string;
+  status: string;
+  target: string | null;
+  startedAt: string;
+  finishedAt: string | null;
+  durationMs: number | null;
+  isRetry: boolean;
+}
+
+function AgentsPanel({ sessions }: { sessions: StoredSessionAnalytics[] }) {
+  // Derive per-agent stats from sessions + tool calls
+  const agentRows = useMemo(() => {
+    const agents: Array<{ sessionId: string; agentId: string; agentCount: number; toolCalls: number; failed: number; duration: number | null }> = [];
+    for (const s of sessions) {
+      agents.push({
+        sessionId: s.sessionId,
+        agentId: "foreman",
+        agentCount: s.agentCount,
+        toolCalls: s.toolCallCount,
+        failed: s.failedToolCalls,
+        duration: s.durationMs,
+      });
+    }
+    return agents;
+  }, [sessions]);
+
+  return (
+    <div className="analytics-section">
+      <h3>Agent Performance</h3>
+      {agentRows.length === 0 ? (
+        <p className="analytics-empty">No agent data yet</p>
+      ) : (
+        <table className="analytics-table">
+          <thead>
+            <tr><th>Session</th><th>Agents</th><th>Tool Calls</th><th>Failed</th><th>Duration</th></tr>
+          </thead>
+          <tbody>
+            {agentRows.map((a, i) => (
+              <tr key={i}>
+                <td title={a.sessionId}>{a.sessionId.slice(0, 8)}…</td>
+                <td>{a.agentCount}</td>
+                <td>{a.toolCalls}</td>
+                <td>{a.failed}</td>
+                <td>{formatDuration(a.duration)}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      )}
+    </div>
+  );
+}
+
+// ─── Timeline ───────────────────────────────────────────────────────
+
+function TimelinePanel({ sessions }: { sessions: StoredSessionAnalytics[] }) {
+  const [selectedSession, setSelectedSession] = useState<string | null>(null);
+  const [toolCalls, setToolCalls] = useState<StoredToolCallAnalytics[]>([]);
+  const [replayIndex, setReplayIndex] = useState<number | null>(null);
+  const [playing, setPlaying] = useState(false);
+  const [speed, setSpeed] = useState(1);
+
+  const target = selectedSession ?? sessions[0]?.sessionId;
+
+  useEffect(() => {
+    if (!target) return;
+    fetch(`${API}/analytics/sessions/${target}/tools`)
+      .then((r) => r.ok ? r.json() : [])
+      .then((data) => { setToolCalls(data); setReplayIndex(null); setPlaying(false); })
+      .catch(() => setToolCalls([]));
+  }, [target]);
+
+  // Replay timer
+  useEffect(() => {
+    if (!playing || replayIndex === null || replayIndex >= toolCalls.length - 1) {
+      if (playing && replayIndex !== null && replayIndex >= toolCalls.length - 1) setPlaying(false);
+      return;
+    }
+    const timer = setTimeout(() => setReplayIndex((i) => (i ?? 0) + 1), 800 / speed);
+    return () => clearTimeout(timer);
+  }, [playing, replayIndex, toolCalls.length, speed]);
+
+  const visibleCalls = replayIndex !== null ? toolCalls.slice(0, replayIndex + 1) : toolCalls;
+
+  return (
+    <div className="analytics-section">
+      <h3>Session Timeline & Replay</h3>
+      <div style={{ display: "flex", gap: 8, marginBottom: 10, alignItems: "center", flexWrap: "wrap" }}>
+        <select
+          value={target ?? ""}
+          onChange={(e) => setSelectedSession(e.target.value)}
+          style={{ padding: "4px 8px", borderRadius: 4, border: "1px solid var(--border)", fontSize: 12 }}
+        >
+          {sessions.map((s) => (
+            <option key={s.sessionId} value={s.sessionId}>
+              {s.sessionId.slice(0, 8)}… — {s.prompt?.slice(0, 40) ?? "no prompt"} ({formatTime(s.startedAt)})
+            </option>
+          ))}
+        </select>
+        <button className="subtab" onClick={() => { setReplayIndex(0); setPlaying(true); }}>
+          {playing ? "⏸ Pause" : "▶ Replay"}
+        </button>
+        {replayIndex !== null && (
+          <>
+            <button className="subtab" onClick={() => setReplayIndex(Math.max(0, (replayIndex ?? 0) - 1))}>⏮ Prev</button>
+            <button className="subtab" onClick={() => setReplayIndex(Math.min(toolCalls.length - 1, (replayIndex ?? 0) + 1))}>Next ⏭</button>
+            <button className="subtab" onClick={() => { setReplayIndex(null); setPlaying(false); }}>Show All</button>
+            <select value={speed} onChange={(e) => setSpeed(Number(e.target.value))}
+              style={{ padding: "2px 6px", borderRadius: 4, border: "1px solid var(--border)", fontSize: 11 }}>
+              <option value={0.5}>0.5x</option>
+              <option value={1}>1x</option>
+              <option value={2}>2x</option>
+              <option value={4}>4x</option>
+            </select>
+            <span style={{ fontSize: 11, color: "var(--text-muted)" }}>
+              {(replayIndex ?? 0) + 1} / {toolCalls.length}
+            </span>
+          </>
+        )}
+      </div>
+      {visibleCalls.length === 0 ? (
+        <p className="analytics-empty">No tool calls for this session</p>
+      ) : (
+        <div className="timeline-list">
+          {visibleCalls.map((tc, i) => (
+            <div
+              key={tc.toolUseId}
+              className={`timeline-event timeline-${tc.status} ${replayIndex !== null && i === replayIndex ? "timeline-active" : ""}`}
+            >
+              <span className="timeline-time">{formatTime(tc.startedAt)}</span>
+              <span className={`timeline-status status-${tc.status}`}>
+                {tc.status === "succeeded" ? "✓" : tc.status === "failed" ? "✗" : "⋯"}
+              </span>
+              <span className="timeline-tool">{tc.toolName}</span>
+              <span className="timeline-target">{tc.target ?? ""}</span>
+              <span className="timeline-duration">{formatDuration(tc.durationMs)}</span>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ─── Compare ────────────────────────────────────────────────────────
+
+function ComparePanel({ sessions }: { sessions: StoredSessionAnalytics[] }) {
+  const [idA, setIdA] = useState<string>("");
+  const [idB, setIdB] = useState<string>("");
+
+  const a = sessions.find((s) => s.sessionId === idA);
+  const b = sessions.find((s) => s.sessionId === idB);
+
+  if (sessions.length < 2) {
+    return <p className="analytics-empty">Need at least 2 sessions to compare</p>;
+  }
+
+  function row(label: string, va: string | number | null, vb: string | number | null) {
+    return (
+      <tr>
+        <td style={{ fontWeight: 600 }}>{label}</td>
+        <td>{va ?? "—"}</td>
+        <td>{vb ?? "—"}</td>
+      </tr>
+    );
+  }
+
+  return (
+    <div className="analytics-section">
+      <h3>Session Comparison</h3>
+      <div style={{ display: "flex", gap: 12, marginBottom: 12 }}>
+        <select value={idA} onChange={(e) => setIdA(e.target.value)}
+          style={{ flex: 1, padding: "4px 8px", borderRadius: 4, border: "1px solid var(--border)", fontSize: 12 }}>
+          <option value="">Select session A</option>
+          {sessions.map((s) => (
+            <option key={s.sessionId} value={s.sessionId}>{s.sessionId.slice(0, 8)}… — {s.prompt?.slice(0, 30) ?? "no prompt"}</option>
+          ))}
+        </select>
+        <select value={idB} onChange={(e) => setIdB(e.target.value)}
+          style={{ flex: 1, padding: "4px 8px", borderRadius: 4, border: "1px solid var(--border)", fontSize: 12 }}>
+          <option value="">Select session B</option>
+          {sessions.map((s) => (
+            <option key={s.sessionId} value={s.sessionId}>{s.sessionId.slice(0, 8)}… — {s.prompt?.slice(0, 30) ?? "no prompt"}</option>
+          ))}
+        </select>
+      </div>
+      {a && b ? (
+        <table className="analytics-table">
+          <thead><tr><th>Metric</th><th>Session A</th><th>Session B</th></tr></thead>
+          <tbody>
+            {row("Agents", a.agentCount, b.agentCount)}
+            {row("Tool Calls", a.toolCallCount, b.toolCallCount)}
+            {row("Failed", a.failedToolCalls, b.failedToolCalls)}
+            {row("Success Rate",
+              a.toolCallCount > 0 ? `${Math.round((a.successfulToolCalls / a.toolCallCount) * 100)}%` : "—",
+              b.toolCallCount > 0 ? `${Math.round((b.successfulToolCalls / b.toolCallCount) * 100)}%` : "—"
+            )}
+            {row("Permissions", a.permissionRequests, b.permissionRequests)}
+            {row("Duration", formatDuration(a.durationMs), formatDuration(b.durationMs))}
+            {row("Prompt", a.prompt?.slice(0, 50) ?? "—", b.prompt?.slice(0, 50) ?? "—")}
+          </tbody>
+        </table>
+      ) : (
+        <p className="analytics-empty">Select two sessions to compare</p>
+      )}
+    </div>
+  );
+}
+
+// ─── Main view ──────────────────────────────────────────────────────
+
+export function AnalyticsView() {
+  const [subTab, setSubTab] = useState<SubTab>("overview");
+  const [sessions, setSessions] = useState<StoredSessionAnalytics[]>([]);
+  const [toolSummaries, setToolSummaries] = useState<ToolSummaryRow[]>([]);
+  const [permissions, setPermissions] = useState<StoredPermissionEvent[]>([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    let cancelled = false;
+    async function load() {
+      try {
+        const [sessRes, toolRes, permRes] = await Promise.all([
+          fetch(`${API}/analytics/sessions`),
+          fetch(`${API}/analytics/tools/summary`),
+          fetch(`${API}/analytics/permissions`),
+        ]);
+        if (cancelled) return;
+        if (sessRes.ok) setSessions(await sessRes.json());
+        if (toolRes.ok) setToolSummaries(await toolRes.json());
+        if (permRes.ok) setPermissions(await permRes.json());
+      } catch { /* offline */ }
+      setLoading(false);
+    }
+    load();
+    const interval = setInterval(load, 5000);
+    return () => { cancelled = true; clearInterval(interval); };
+  }, []);
+
+  if (loading) return <div className="analytics-loading">Loading analytics…</div>;
+
+  return (
+    <div className="analytics-view">
+      <nav className="analytics-subtabs">
+        {(["overview", "tools", "permissions", "prompts"] as SubTab[]).map((t) => (
+          <button key={t} className={`subtab ${subTab === t ? "active" : ""}`} onClick={() => setSubTab(t)}>
+            {t.charAt(0).toUpperCase() + t.slice(1)}
+          </button>
+        ))}
+      </nav>
+      <div className="analytics-content">
+        {subTab === "overview" && <OverviewPanel sessions={sessions} />}
+        {subTab === "tools" && <ToolsPanel summaries={toolSummaries} />}
+        {subTab === "agents" && <AgentsPanel sessions={sessions} />}
+        {subTab === "timeline" && <TimelinePanel sessions={sessions} />}
+        {subTab === "compare" && <ComparePanel sessions={sessions} />}
+        {subTab === "permissions" && <PermissionsPanel events={permissions} />}
+        {subTab === "prompts" && <PromptsPanel sessions={sessions} />}
+      </div>
+    </div>
+  );
+}

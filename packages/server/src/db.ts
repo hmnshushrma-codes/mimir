@@ -113,7 +113,56 @@ CREATE TABLE IF NOT EXISTS session_recaps (
   model TEXT,
   generated_at TEXT NOT NULL
 );
+
+-- Part 3: Analytics tables
+CREATE TABLE IF NOT EXISTS session_analytics (
+  session_id TEXT PRIMARY KEY,
+  project_id TEXT NOT NULL,
+  started_at TEXT NOT NULL,
+  ended_at TEXT,
+  duration_ms INTEGER,
+  agent_count INTEGER NOT NULL DEFAULT 0,
+  subagent_count INTEGER NOT NULL DEFAULT 0,
+  tool_call_count INTEGER NOT NULL DEFAULT 0,
+  successful_tool_calls INTEGER NOT NULL DEFAULT 0,
+  failed_tool_calls INTEGER NOT NULL DEFAULT 0,
+  permission_requests INTEGER NOT NULL DEFAULT 0,
+  prompt TEXT,
+  computed_at TEXT NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS tool_call_analytics (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  tool_use_id TEXT NOT NULL,
+  session_id TEXT NOT NULL,
+  agent_id TEXT NOT NULL,
+  tool_name TEXT NOT NULL,
+  category TEXT NOT NULL,
+  status TEXT NOT NULL,
+  target TEXT,
+  started_at TEXT NOT NULL,
+  finished_at TEXT,
+  duration_ms INTEGER,
+  is_retry INTEGER NOT NULL DEFAULT 0
+);
+CREATE INDEX IF NOT EXISTS idx_tool_analytics_session ON tool_call_analytics (session_id);
+CREATE INDEX IF NOT EXISTS idx_tool_analytics_tool ON tool_call_analytics (tool_name);
+
+CREATE TABLE IF NOT EXISTS permission_events (
+  id TEXT PRIMARY KEY,
+  session_id TEXT NOT NULL,
+  agent_id TEXT NOT NULL,
+  tool_name TEXT,
+  command_preview TEXT,
+  requested_at TEXT NOT NULL,
+  decided_at TEXT,
+  decision TEXT NOT NULL DEFAULT 'pending',
+  waiting_duration_ms INTEGER,
+  request_type TEXT NOT NULL DEFAULT 'permission'
+);
+CREATE INDEX IF NOT EXISTS idx_permission_session ON permission_events (session_id);
 `;
+
 
 export function openDb(path: string): DatabaseSync {
   const db = new DatabaseSyncImpl(path);
@@ -300,8 +349,10 @@ export function clearHistory(db: DatabaseSync, keepSessionIds: string[] = []): {
     const placeholders = keepSessionIds.map(() => "?").join(",");
     const evtResult = db.prepare(`DELETE FROM events WHERE session_id NOT IN (${placeholders})`).run(...keepSessionIds);
     db.prepare(`DELETE FROM session_recaps WHERE session_id NOT IN (${placeholders})`).run(...keepSessionIds);
+    db.prepare(`DELETE FROM session_analytics WHERE session_id NOT IN (${placeholders})`).run(...keepSessionIds);
+    db.prepare(`DELETE FROM tool_call_analytics WHERE session_id NOT IN (${placeholders})`).run(...keepSessionIds);
+    db.prepare(`DELETE FROM permission_events WHERE session_id NOT IN (${placeholders})`).run(...keepSessionIds);
     const sessResult = db.prepare(`DELETE FROM sessions WHERE id NOT IN (${placeholders})`).run(...keepSessionIds);
-    // Delete orphan projects that have no remaining sessions
     const projResult = db.prepare(`DELETE FROM projects WHERE id NOT IN (SELECT DISTINCT project_id FROM sessions)`).run();
     db.prepare(`DELETE FROM project_notes WHERE project_id NOT IN (SELECT id FROM projects)`).run();
     return {
@@ -315,6 +366,9 @@ export function clearHistory(db: DatabaseSync, keepSessionIds: string[] = []): {
   const projResult = db.prepare(`DELETE FROM projects`).run();
   db.prepare(`DELETE FROM project_notes`).run();
   db.prepare(`DELETE FROM session_recaps`).run();
+  db.prepare(`DELETE FROM session_analytics`).run();
+  db.prepare(`DELETE FROM tool_call_analytics`).run();
+  db.prepare(`DELETE FROM permission_events`).run();
   return {
     deletedEvents: Number(evtResult.changes),
     deletedSessions: Number(sessResult.changes),
@@ -331,8 +385,11 @@ export function purgeOldData(db: DatabaseSync, maxAgeMs: number): number {
   const evtResult = db.prepare(`DELETE FROM events WHERE timestamp < ?`).run(cutoff);
   // Delete old sessions that have no remaining events
   db.prepare(`DELETE FROM sessions WHERE id NOT IN (SELECT DISTINCT session_id FROM events)`).run();
-  // Delete orphan recaps
+  // Delete orphan recaps and analytics
   db.prepare(`DELETE FROM session_recaps WHERE session_id NOT IN (SELECT id FROM sessions)`).run();
+  db.prepare(`DELETE FROM session_analytics WHERE session_id NOT IN (SELECT id FROM sessions)`).run();
+  db.prepare(`DELETE FROM tool_call_analytics WHERE session_id NOT IN (SELECT id FROM sessions)`).run();
+  db.prepare(`DELETE FROM permission_events WHERE session_id NOT IN (SELECT id FROM sessions)`).run();
   // Delete orphan projects
   db.prepare(`DELETE FROM projects WHERE id NOT IN (SELECT DISTINCT project_id FROM sessions)`).run();
   db.prepare(`DELETE FROM project_notes WHERE project_id NOT IN (SELECT id FROM projects)`).run();
@@ -346,4 +403,244 @@ export function listAllEventsRaw(db: DatabaseSync): Array<{ rawJson: string }> {
     .prepare(`SELECT raw_json FROM events ORDER BY id ASC`)
     .all() as Array<Record<string, unknown>>;
   return rows.map((row) => ({ rawJson: row.raw_json as string }));
+}
+
+// ─── Part 3: Analytics persistence ──────────────────────────────────
+
+export interface StoredSessionAnalytics {
+  sessionId: string;
+  projectId: string;
+  startedAt: string;
+  endedAt: string | null;
+  durationMs: number | null;
+  agentCount: number;
+  subagentCount: number;
+  toolCallCount: number;
+  successfulToolCalls: number;
+  failedToolCalls: number;
+  permissionRequests: number;
+  prompt: string | null;
+  computedAt: string;
+}
+
+export function upsertSessionAnalytics(db: DatabaseSync, row: StoredSessionAnalytics): void {
+  db.prepare(
+    `INSERT INTO session_analytics
+       (session_id, project_id, started_at, ended_at, duration_ms, agent_count, subagent_count,
+        tool_call_count, successful_tool_calls, failed_tool_calls, permission_requests, prompt, computed_at)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+     ON CONFLICT(session_id) DO UPDATE SET
+       ended_at = excluded.ended_at,
+       duration_ms = excluded.duration_ms,
+       agent_count = excluded.agent_count,
+       subagent_count = excluded.subagent_count,
+       tool_call_count = excluded.tool_call_count,
+       successful_tool_calls = excluded.successful_tool_calls,
+       failed_tool_calls = excluded.failed_tool_calls,
+       permission_requests = excluded.permission_requests,
+       prompt = COALESCE(excluded.prompt, session_analytics.prompt),
+       computed_at = excluded.computed_at`
+  ).run(
+    row.sessionId, row.projectId, row.startedAt, row.endedAt, row.durationMs,
+    row.agentCount, row.subagentCount, row.toolCallCount, row.successfulToolCalls,
+    row.failedToolCalls, row.permissionRequests, row.prompt, row.computedAt
+  );
+}
+
+export function getSessionAnalytics(db: DatabaseSync, sessionId: string): StoredSessionAnalytics | null {
+  const row = db.prepare(`SELECT * FROM session_analytics WHERE session_id = ?`).get(sessionId) as
+    | Record<string, unknown>
+    | undefined;
+  if (!row) return null;
+  return {
+    sessionId: row.session_id as string,
+    projectId: row.project_id as string,
+    startedAt: row.started_at as string,
+    endedAt: (row.ended_at as string | null) ?? null,
+    durationMs: (row.duration_ms as number | null) ?? null,
+    agentCount: row.agent_count as number,
+    subagentCount: row.subagent_count as number,
+    toolCallCount: row.tool_call_count as number,
+    successfulToolCalls: row.successful_tool_calls as number,
+    failedToolCalls: row.failed_tool_calls as number,
+    permissionRequests: row.permission_requests as number,
+    prompt: (row.prompt as string | null) ?? null,
+    computedAt: row.computed_at as string,
+  };
+}
+
+export function listSessionAnalytics(db: DatabaseSync): StoredSessionAnalytics[] {
+  const rows = db.prepare(`SELECT * FROM session_analytics ORDER BY started_at DESC`).all() as Array<Record<string, unknown>>;
+  return rows.map((row) => ({
+    sessionId: row.session_id as string,
+    projectId: row.project_id as string,
+    startedAt: row.started_at as string,
+    endedAt: (row.ended_at as string | null) ?? null,
+    durationMs: (row.duration_ms as number | null) ?? null,
+    agentCount: row.agent_count as number,
+    subagentCount: row.subagent_count as number,
+    toolCallCount: row.tool_call_count as number,
+    successfulToolCalls: row.successful_tool_calls as number,
+    failedToolCalls: row.failed_tool_calls as number,
+    permissionRequests: row.permission_requests as number,
+    prompt: (row.prompt as string | null) ?? null,
+    computedAt: row.computed_at as string,
+  }));
+}
+
+export interface StoredToolCallAnalytics {
+  toolUseId: string;
+  sessionId: string;
+  agentId: string;
+  toolName: string;
+  category: string;
+  status: string;
+  target: string | null;
+  startedAt: string;
+  finishedAt: string | null;
+  durationMs: number | null;
+  isRetry: boolean;
+}
+
+export function insertToolCallAnalytics(db: DatabaseSync, row: StoredToolCallAnalytics): void {
+  db.prepare(
+    `INSERT OR IGNORE INTO tool_call_analytics
+       (tool_use_id, session_id, agent_id, tool_name, category, status, target, started_at, finished_at, duration_ms, is_retry)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+  ).run(
+    row.toolUseId, row.sessionId, row.agentId, row.toolName, row.category,
+    row.status, row.target, row.startedAt, row.finishedAt, row.durationMs,
+    row.isRetry ? 1 : 0
+  );
+}
+
+export function updateToolCallAnalytics(db: DatabaseSync, toolUseId: string, status: string, finishedAt: string, durationMs: number): void {
+  db.prepare(
+    `UPDATE tool_call_analytics SET status = ?, finished_at = ?, duration_ms = ? WHERE tool_use_id = ?`
+  ).run(status, finishedAt, durationMs, toolUseId);
+}
+
+export function listToolCallAnalyticsBySession(db: DatabaseSync, sessionId: string): StoredToolCallAnalytics[] {
+  const rows = db.prepare(
+    `SELECT * FROM tool_call_analytics WHERE session_id = ? ORDER BY started_at ASC`
+  ).all(sessionId) as Array<Record<string, unknown>>;
+  return rows.map((row) => ({
+    toolUseId: row.tool_use_id as string,
+    sessionId: row.session_id as string,
+    agentId: row.agent_id as string,
+    toolName: row.tool_name as string,
+    category: row.category as string,
+    status: row.status as string,
+    target: (row.target as string | null) ?? null,
+    startedAt: row.started_at as string,
+    finishedAt: (row.finished_at as string | null) ?? null,
+    durationMs: (row.duration_ms as number | null) ?? null,
+    isRetry: (row.is_retry as number) === 1,
+  }));
+}
+
+export interface ToolSummaryRow {
+  toolName: string;
+  category: string;
+  totalCalls: number;
+  successCount: number;
+  failureCount: number;
+  retryCount: number;
+  avgDurationMs: number | null;
+  maxDurationMs: number | null;
+}
+
+export function getToolSummaries(db: DatabaseSync, sessionId?: string): ToolSummaryRow[] {
+  const where = sessionId ? `WHERE session_id = ?` : "";
+  const params = sessionId ? [sessionId] : [];
+  const rows = db.prepare(
+    `SELECT
+       tool_name,
+       category,
+       COUNT(*) as total_calls,
+       SUM(CASE WHEN status = 'succeeded' THEN 1 ELSE 0 END) as success_count,
+       SUM(CASE WHEN status = 'failed' THEN 1 ELSE 0 END) as failure_count,
+       SUM(is_retry) as retry_count,
+       AVG(duration_ms) as avg_duration_ms,
+       MAX(duration_ms) as max_duration_ms
+     FROM tool_call_analytics ${where}
+     GROUP BY tool_name
+     ORDER BY total_calls DESC`
+  ).all(...params) as Array<Record<string, unknown>>;
+  return rows.map((row) => ({
+    toolName: row.tool_name as string,
+    category: row.category as string,
+    totalCalls: row.total_calls as number,
+    successCount: row.success_count as number,
+    failureCount: row.failure_count as number,
+    retryCount: row.retry_count as number,
+    avgDurationMs: (row.avg_duration_ms as number | null) ?? null,
+    maxDurationMs: (row.max_duration_ms as number | null) ?? null,
+  }));
+}
+
+export interface StoredPermissionEvent {
+  id: string;
+  sessionId: string;
+  agentId: string;
+  toolName: string | null;
+  commandPreview: string | null;
+  requestedAt: string;
+  decidedAt: string | null;
+  decision: string;
+  waitingDurationMs: number | null;
+  requestType: string;
+}
+
+export function upsertPermissionEvent(db: DatabaseSync, row: StoredPermissionEvent): void {
+  db.prepare(
+    `INSERT INTO permission_events
+       (id, session_id, agent_id, tool_name, command_preview, requested_at, decided_at, decision, waiting_duration_ms, request_type)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+     ON CONFLICT(id) DO UPDATE SET
+       decided_at = excluded.decided_at,
+       decision = excluded.decision,
+       waiting_duration_ms = excluded.waiting_duration_ms`
+  ).run(
+    row.id, row.sessionId, row.agentId, row.toolName, row.commandPreview,
+    row.requestedAt, row.decidedAt, row.decision, row.waitingDurationMs, row.requestType
+  );
+}
+
+export function listPermissionEvents(db: DatabaseSync, sessionId?: string): StoredPermissionEvent[] {
+  const where = sessionId ? `WHERE session_id = ?` : "";
+  const params = sessionId ? [sessionId] : [];
+  const rows = db.prepare(
+    `SELECT * FROM permission_events ${where} ORDER BY requested_at DESC`
+  ).all(...params) as Array<Record<string, unknown>>;
+  return rows.map((row) => ({
+    id: row.id as string,
+    sessionId: row.session_id as string,
+    agentId: row.agent_id as string,
+    toolName: (row.tool_name as string | null) ?? null,
+    commandPreview: (row.command_preview as string | null) ?? null,
+    requestedAt: row.requested_at as string,
+    decidedAt: (row.decided_at as string | null) ?? null,
+    decision: row.decision as string,
+    waitingDurationMs: (row.waiting_duration_ms as number | null) ?? null,
+    requestType: row.request_type as string,
+  }));
+}
+
+export function getPendingPermissions(db: DatabaseSync): StoredPermissionEvent[] {
+  const rows = db.prepare(
+    `SELECT * FROM permission_events WHERE decision = 'pending' ORDER BY requested_at ASC`
+  ).all() as Array<Record<string, unknown>>;
+  return rows.map((row) => ({
+    id: row.id as string,
+    sessionId: row.session_id as string,
+    agentId: row.agent_id as string,
+    toolName: (row.tool_name as string | null) ?? null,
+    commandPreview: (row.command_preview as string | null) ?? null,
+    requestedAt: row.requested_at as string,
+    decidedAt: null,
+    decision: "pending",
+    waitingDurationMs: null,
+    requestType: row.request_type as string,
+  }));
 }
