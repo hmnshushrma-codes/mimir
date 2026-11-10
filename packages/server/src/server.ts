@@ -266,6 +266,24 @@ export function buildApp({
         });
       }
     }
+    // Resolve pending permission events: when a PreToolUse arrives for an agent
+    // that had a pending permission, it means the user approved. Likewise, if a
+    // Stop arrives with pending permissions, they were effectively cancelled.
+    if (workshopEvent.hookEventName === "PreToolUse" || workshopEvent.hookEventName === "Stop") {
+      const pending = getPendingPermissions(db);
+      for (const perm of pending) {
+        if (perm.sessionId === workshopEvent.sessionId && perm.agentId === workshopEvent.agentId) {
+          const decision = workshopEvent.hookEventName === "Stop" ? "cancelled" : "approved";
+          const waitMs = Date.parse(workshopEvent.timestamp) - Date.parse(perm.requestedAt);
+          upsertPermissionEvent(db, {
+            ...perm,
+            decidedAt: workshopEvent.timestamp,
+            decision,
+            waitingDurationMs: waitMs > 0 ? waitMs : null,
+          });
+        }
+      }
+    }
     // Update session analytics on every event
     const sessionAnalytics = buildSessionAnalytics(session, (envelope as { prompt?: string }).prompt ?? null);
     upsertSessionAnalytics(db, {

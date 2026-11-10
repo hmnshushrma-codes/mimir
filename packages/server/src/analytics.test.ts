@@ -95,6 +95,35 @@ describe("analytics telemetry — end-to-end ingestion", () => {
     expect(pending.some((p) => p.sessionId === "s2")).toBe(true);
   });
 
+  it("resolves permission events when next tool call arrives (approved lifecycle)", async () => {
+    const t = (ms: number) => new Date(Date.now() + ms).toISOString();
+
+    await postEvent({ session_id: "s-perm", hook_event_name: "SessionStart", source: "startup", timestamp: t(0) });
+    await postEvent({ session_id: "s-perm", hook_event_name: "PreToolUse", tool_name: "Bash", tool_input: { command: "rm -rf /tmp" }, tool_use_id: "tu-p1", timestamp: t(500) });
+    // Permission prompt arrives
+    await postEvent({ session_id: "s-perm", hook_event_name: "Notification", notification_type: "permission_prompt", message: "Allow?", timestamp: t(1000) });
+
+    // Verify it's pending
+    let perms = listPermissionEvents(db, "s-perm");
+    expect(perms.length).toBe(1);
+    expect(perms[0].decision).toBe("pending");
+
+    // User approves → next tool call arrives 5 seconds later
+    await postEvent({ session_id: "s-perm", hook_event_name: "PostToolUse", tool_name: "Bash", tool_input: {}, tool_output: "ok", tool_use_id: "tu-p1", timestamp: t(6000) });
+    await postEvent({ session_id: "s-perm", hook_event_name: "PreToolUse", tool_name: "Bash", tool_input: { command: "echo done" }, tool_use_id: "tu-p2", timestamp: t(6500) });
+
+    // Permission should now be resolved
+    perms = listPermissionEvents(db, "s-perm");
+    const resolved = perms.find((p) => p.decision === "approved");
+    expect(resolved).toBeDefined();
+    expect(resolved!.decidedAt).not.toBeNull();
+    expect(resolved!.waitingDurationMs).toBeGreaterThan(0);
+
+    // No more pending
+    const pending = getPendingPermissions(db);
+    expect(pending.filter((p) => p.sessionId === "s-perm")).toHaveLength(0);
+  });
+
   it("produces tool summaries with correct aggregation", async () => {
     const t = (ms: number) => new Date(Date.now() + ms).toISOString();
 
