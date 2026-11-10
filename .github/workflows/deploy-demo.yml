@@ -23,11 +23,13 @@ jobs:
           cache: "pnpm"
 
       - run: pnpm install --frozen-lockfile
+        env:
+          PNPM_IGNORE_BUILDS: "true"
 
       # Build the shared package first (web depends on it)
       - run: pnpm --filter @agent-workshop/shared run build
 
-      # Build the web package with VITE_DEMO=true
+      # Build the web package with VITE_DEMO=true — static output, no backend
       - run: pnpm --filter @agent-workshop/web run build
         env:
           VITE_DEMO: "true"
