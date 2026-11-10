@@ -1530,3 +1530,50 @@ body {
 .prompt-issues li, .prompt-suggestions li {
   margin-bottom: 2px;
 }
+
+.timeline-list {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.timeline-event {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 4px 8px;
+  border-radius: 4px;
+  font-size: 12px;
+}
+.timeline-event:hover {
+  background: var(--surface-alt);
+}
+.timeline-time {
+  color: var(--text-muted);
+  font-size: 11px;
+  min-width: 50px;
+}
+.timeline-status {
+  font-weight: 700;
+  min-width: 14px;
+  text-align: center;
+}
+.status-succeeded { color: var(--ok); }
+.status-failed { color: var(--error); }
+.status-running { color: var(--warn); }
+.timeline-tool {
+  font-weight: 600;
+  min-width: 60px;
+}
+.timeline-target {
+  color: var(--text-muted);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  flex: 1;
+}
+.timeline-duration {
+  color: var(--text-muted);
+  font-size: 11px;
+  min-width: 40px;
+  text-align: right;
+}

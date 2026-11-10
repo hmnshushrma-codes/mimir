@@ -19,7 +19,7 @@ import { useWorkshopStore } from "../store/useWorkshopStore.js";
 
 const API = window.location.origin;
 
-type SubTab = "overview" | "tools" | "permissions" | "prompts";
+type SubTab = "overview" | "tools" | "agents" | "timeline" | "permissions" | "prompts";
 
 interface StoredSessionAnalytics {
   sessionId: string;
@@ -274,6 +274,119 @@ function PromptsPanel({ sessions }: { sessions: StoredSessionAnalytics[] }) {
   );
 }
 
+// ─── Agents ─────────────────────────────────────────────────────────
+
+interface StoredToolCallAnalytics {
+  toolUseId: string;
+  sessionId: string;
+  agentId: string;
+  toolName: string;
+  category: string;
+  status: string;
+  target: string | null;
+  startedAt: string;
+  finishedAt: string | null;
+  durationMs: number | null;
+  isRetry: boolean;
+}
+
+function AgentsPanel({ sessions }: { sessions: StoredSessionAnalytics[] }) {
+  // Derive per-agent stats from sessions + tool calls
+  const agentRows = useMemo(() => {
+    const agents: Array<{ sessionId: string; agentId: string; agentCount: number; toolCalls: number; failed: number; duration: number | null }> = [];
+    for (const s of sessions) {
+      agents.push({
+        sessionId: s.sessionId,
+        agentId: "foreman",
+        agentCount: s.agentCount,
+        toolCalls: s.toolCallCount,
+        failed: s.failedToolCalls,
+        duration: s.durationMs,
+      });
+    }
+    return agents;
+  }, [sessions]);
+
+  return (
+    <div className="analytics-section">
+      <h3>Agent Performance</h3>
+      {agentRows.length === 0 ? (
+        <p className="analytics-empty">No agent data yet</p>
+      ) : (
+        <table className="analytics-table">
+          <thead>
+            <tr><th>Session</th><th>Agents</th><th>Tool Calls</th><th>Failed</th><th>Duration</th></tr>
+          </thead>
+          <tbody>
+            {agentRows.map((a, i) => (
+              <tr key={i}>
+                <td title={a.sessionId}>{a.sessionId.slice(0, 8)}…</td>
+                <td>{a.agentCount}</td>
+                <td>{a.toolCalls}</td>
+                <td>{a.failed}</td>
+                <td>{formatDuration(a.duration)}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      )}
+    </div>
+  );
+}
+
+// ─── Timeline ───────────────────────────────────────────────────────
+
+function TimelinePanel({ sessions }: { sessions: StoredSessionAnalytics[] }) {
+  const [selectedSession, setSelectedSession] = useState<string | null>(null);
+  const [toolCalls, setToolCalls] = useState<StoredToolCallAnalytics[]>([]);
+
+  const target = selectedSession ?? sessions[0]?.sessionId;
+
+  useEffect(() => {
+    if (!target) return;
+    fetch(`${API}/analytics/sessions/${target}/tools`)
+      .then((r) => r.ok ? r.json() : [])
+      .then(setToolCalls)
+      .catch(() => setToolCalls([]));
+  }, [target]);
+
+  return (
+    <div className="analytics-section">
+      <h3>Session Timeline</h3>
+      <div style={{ marginBottom: 10 }}>
+        <select
+          value={target ?? ""}
+          onChange={(e) => setSelectedSession(e.target.value)}
+          style={{ padding: "4px 8px", borderRadius: 4, border: "1px solid var(--border)", fontSize: 12 }}
+        >
+          {sessions.map((s) => (
+            <option key={s.sessionId} value={s.sessionId}>
+              {s.sessionId.slice(0, 8)}… — {s.prompt?.slice(0, 40) ?? "no prompt"} ({formatTime(s.startedAt)})
+            </option>
+          ))}
+        </select>
+      </div>
+      {toolCalls.length === 0 ? (
+        <p className="analytics-empty">No tool calls for this session</p>
+      ) : (
+        <div className="timeline-list">
+          {toolCalls.map((tc) => (
+            <div key={tc.toolUseId} className={`timeline-event timeline-${tc.status}`}>
+              <span className="timeline-time">{formatTime(tc.startedAt)}</span>
+              <span className={`timeline-status status-${tc.status}`}>
+                {tc.status === "succeeded" ? "✓" : tc.status === "failed" ? "✗" : "⋯"}
+              </span>
+              <span className="timeline-tool">{tc.toolName}</span>
+              <span className="timeline-target">{tc.target ?? ""}</span>
+              <span className="timeline-duration">{formatDuration(tc.durationMs)}</span>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
 // ─── Main view ──────────────────────────────────────────────────────
 
 export function AnalyticsView() {
@@ -318,6 +431,8 @@ export function AnalyticsView() {
       <div className="analytics-content">
         {subTab === "overview" && <OverviewPanel sessions={sessions} />}
         {subTab === "tools" && <ToolsPanel summaries={toolSummaries} />}
+        {subTab === "agents" && <AgentsPanel sessions={sessions} />}
+        {subTab === "timeline" && <TimelinePanel sessions={sessions} />}
         {subTab === "permissions" && <PermissionsPanel events={permissions} />}
         {subTab === "prompts" && <PromptsPanel sessions={sessions} />}
       </div>
