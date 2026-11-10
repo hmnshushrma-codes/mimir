@@ -1590,3 +1590,38 @@ body {
 .timeline-active .timeline-tool {
   color: #fff;
 }
+
+/* ---------- Demo control bar ---------- */
+
+.demo-control-bar {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 12px;
+  background: var(--surface-alt);
+  border-bottom: 1px solid var(--border);
+}
+.demo-badge {
+  background: var(--accent);
+  color: #fff;
+  font-size: 10px;
+  font-weight: 700;
+  padding: 2px 8px;
+  border-radius: 4px;
+  letter-spacing: 0.5px;
+  margin-right: 6px;
+}
+.demo-btn {
+  background: transparent;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  color: var(--text);
+  font-size: 11px;
+  padding: 4px 10px;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+.demo-btn:hover {
+  background: var(--surface);
+  border-color: var(--accent);
+}
