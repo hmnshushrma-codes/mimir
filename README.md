@@ -1,6 +1,6 @@
 # Mimir
 
-**[Live Demo](https://mimir-demo.pages.dev)** — try it in your browser, no install needed | [ninoforge.com](https://ninoforge.com)
+**[Live Demo](https://mimir-demo.ninoforge.com)** — try it in your browser, no install needed | [ninoforge.com](https://ninoforge.com)
 
 > The demo is fully simulated — no real sessions, API keys, or backend required.
 
