@@ -1,19 +1,45 @@
 # Mimir
 
-**[Live Demo](https://mimir-demo.ninoforge.com)** — try it in your browser, no install needed | [ninoforge.com](https://ninoforge.com)
+**[Live Demo](https://mimir-demo.ninoforge.com)** — try it in your browser, no install needed
 
 > The demo is fully simulated — no real sessions, API keys, or backend required.
 
 <!-- TODO: Replace with actual GIF once recorded -->
 <!-- ![Mimir Demo](docs/demo.gif) -->
 
-Live animated visualization of Claude Code sessions — watch your AI agents
-work at their desks in a workshop room.
+Watch your AI coding agents work in real time. Mimir visualizes Claude Code
+sessions as animated characters sitting at desks — you see every tool call,
+delegation, permission request, error, and celebration as it happens.
 
-Each agent is a character sitting at a desk with a monitor. The foreman
-(main agent) receives instructions from you, delegates to workers
-(subagents), and you can see every tool call, permission wait, error,
-and delegation happening in real time.
+## Features
+
+### Live Workshop
+- **Foreman** at a desk with laptop, coffee mug, and idle animations
+- **Workers** (subagents) spawn at smaller desks with role labels
+- Smooth Bézier-curve arms, blinking eyes, breathing animations
+- States: typing, reading, thinking, error (scratch head), permission (raise hand), sleeping (eyes closed + Zzz), celebrate (thumbs up + sparkles)
+
+### Intelligence Layer
+- **Session Analytics** — agents, tool calls, failures, duration per session
+- **Tool Execution Analytics** — most used tools, success/failure rates, avg duration, retries
+- **Agent Performance** — per-session agent metrics
+- **Token Usage Accounting** — extracted from Claude Code transcript files (opt-in)
+- **Cost Intelligence** — pricing registry for Claude Opus/Sonnet/Haiku, cost calculation from tokens
+- **Token Waste Detection** — repeated tool calls, redundant file reads, failed retries with confidence levels
+- **Prompt Quality Scoring** — 10-dimension deterministic assessment (no LLM needed), improvement suggestions
+- **Knowledge Intelligence** — CLAUDE.md detection, frequently accessed files, gap detection with recommendations
+- **Permission Tracking** — full lifecycle (request → pending → approved/cancelled with wait duration)
+
+### Session Tools
+- **Timeline** — chronological tool call list per session
+- **Historical Replay** — play/pause/step through past sessions
+- **Session Comparison** — side-by-side metrics for two sessions
+- **Permission Queue** — pending approvals with agent and tool info
+
+### Demo Mode
+- Interactive control bar: trigger permission requests, spawn agents, errors, finish
+- 75-second looping scenario with 3 subagents, error+retry, permission prompt
+- Zero backend — runs entirely in the browser
 
 ```
 You (User) --> Foreman --> Workers (subagents)
@@ -49,6 +75,8 @@ See it without a real Claude Code session:
 npx mimir-dev demo
 ```
 
+Or visit the [live demo](https://mimir-demo.ninoforge.com).
+
 ## Commands
 
 | Command | Description |
@@ -60,35 +88,27 @@ npx mimir-dev demo
 | `mimir uninstall` | Remove hooks |
 | `mimir status` | Check hook install & collector status |
 
-## What you'll see
-
-- **Workshop room** with pegboard, window, and time-based lighting (sunlight during day, warm lamps at night)
-- **You** — a customizable avatar (click the pencil icon to change hair, skin, glasses, shirt, expression)
-- **Foreman** — the main Claude Code agent at a big desk with a monitor showing code
-- **Workers** — subagents at smaller desks, each with role labels (Explore, Plan, general-purpose)
-- **Cable-managed wires** — trunk + branch wiring from foreman to each worker
-- **Delegation blobs** — animated dots traveling along wires when work is delegated
-- **Moods** — focused (typing), worried (permission wait, jumping + ?), dizzy/frustrated (errors), sleepy (idle, holding phone)
-- **Blinking eyes** — characters blink periodically
-- **Side panel** — click any character to see their tool call timeline
-
 ## How it works
 
 ```
 Claude Code hooks --> POST events --> Collector server --> WebSocket --> React app
-                                         |
-                                       SQLite (event log)
+                                         |                    |
+                                       SQLite            Analytics
+                                    (event log)     (tokens, cost, waste,
+                                                     prompts, knowledge)
 ```
 
 1. Claude Code fires hook events (tool calls, subagent spawns, etc.)
 2. A tiny hook script POSTs them to the local collector server
-3. The collector normalizes events, updates the state model, stores in SQLite
+3. The collector normalizes events, persists analytics, stores in SQLite
 4. The React app receives updates via WebSocket and renders the workshop
+5. The Analytics tab shows session metrics, tool stats, prompt quality, and more
 
 ## Privacy
 
 - Everything is **local** — hooks send to `127.0.0.1`, no external network calls
 - Tool inputs/outputs are stored as short previews (500 chars) — set `AGENT_WORKSHOP_PREVIEWS=false` for none
+- Token data from transcripts is opt-in, never sent anywhere
 - Uninstall removes all hooks cleanly, never touches other tools' hooks
 
 ## Configuration
@@ -101,20 +121,28 @@ All via environment variables, all optional:
 | `AGENT_WORKSHOP_HOST` | `127.0.0.1` | Bind address |
 | `AGENT_WORKSHOP_PREVIEWS` | `true` | Store tool previews |
 | `AGENT_WORKSHOP_IDLE_MS` | `120000` | Agent idle timeout (ms) |
-| `AGENT_WORKSHOP_DEPART_AFTER_MS` | `7000` | How long a finished agent lingers (done pose + wave) before departing |
+| `AGENT_WORKSHOP_DEPART_AFTER_MS` | `7000` | How long a finished agent lingers before departing |
 
 ## Development
 
 ```bash
 pnpm install
 pnpm dev          # Collector (:4000) + Vite (:5173) with hot reload
-pnpm test         # 189 tests across all packages
+pnpm test         # 418 tests across all packages
 pnpm typecheck
 pnpm lint
 ```
 
+## Tech stack
+
+- **Frontend**: React, Vite, TypeScript, Framer Motion, Zustand
+- **Backend**: Fastify, SQLite (Node built-in), WebSocket
+- **Hooks**: Claude Code hook scripts (bidirectional — can return permission decisions)
+- **Deploy**: Cloudflare Pages (demo), local Node server (production)
+
 ## Links
 
+- [Live Demo](https://mimir-demo.ninoforge.com)
 - [oyenino.com](https://oyenino.com) — by the creator
 - [ninoforge.com](https://ninoforge.com) — more fun projects
 
