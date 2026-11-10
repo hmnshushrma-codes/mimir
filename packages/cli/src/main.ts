@@ -26,6 +26,7 @@ import {
   installHooks,
   uninstallHooks,
   findOurHooks,
+  shouldRemoveScript,
   type ClaudeSettings
 } from "@agent-workshop/hooks/settings";
 import {
@@ -41,7 +42,12 @@ function readSettings(file: string): ClaudeSettings {
   if (!existsSync(file)) return {};
   const raw = readFileSync(file, "utf-8").trim();
   if (!raw) return {};
-  return JSON.parse(raw) as ClaudeSettings;
+  try {
+    return JSON.parse(raw) as ClaudeSettings;
+  } catch {
+    console.error(`warning: ${file} contains invalid JSON, treating as empty`);
+    return {};
+  }
 }
 
 function backup(file: string): void {
@@ -104,10 +110,22 @@ function cmdUninstall(project: boolean): void {
   backup(target);
   writeSettings(target, updated);
 
-  if (existsSync(scriptDest)) {
-    rmSync(scriptDest);
-    const dir = dirname(scriptDest);
-    if (existsSync(dir) && readdirSync(dir).length === 0) rmSync(dir, { recursive: true });
+  // Only delete the shared script when no hooks remain in ANY scope.
+  // Known limitation: project-scope hooks in OTHER projects (not this cwd)
+  // cannot be detected — we'd have to scan the entire filesystem.
+  const otherScope = settingsPathFor({ project: !project });
+  const { remove, reason } = shouldRemoveScript(updated, otherScope, (p) => readFileSync(p, "utf-8"));
+
+  if (remove) {
+    try {
+      rmSync(scriptDest);
+      const dir = dirname(scriptDest);
+      if (readdirSync(dir).length === 0) rmSync(dir, { recursive: true });
+    } catch (err) {
+      if ((err as NodeJS.ErrnoException).code !== "ENOENT") throw err;
+    }
+  } else {
+    console.log(`  Shared hook-runner kept (${reason})`);
   }
 
   console.log(`✓ Hooks removed from ${target}`);

@@ -2,7 +2,7 @@
 import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
-import { findOurHooks, installHooks, uninstallHooks, type ClaudeSettings } from "./settings.js";
+import { findOurHooks, installHooks, uninstallHooks, shouldRemoveScript, type ClaudeSettings } from "./settings.js";
 import { settingsPathFor, hookScriptPath } from "./paths.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -11,7 +11,12 @@ function readSettings(file: string): ClaudeSettings {
   if (!fs.existsSync(file)) return {};
   const raw = fs.readFileSync(file, "utf-8").trim();
   if (!raw) return {};
-  return JSON.parse(raw) as ClaudeSettings;
+  try {
+    return JSON.parse(raw) as ClaudeSettings;
+  } catch {
+    console.error(`agent-workshop: warning: ${file} contains invalid JSON, treating as empty`);
+    return {};
+  }
 }
 
 function backup(file: string): void {
@@ -56,10 +61,23 @@ function uninstall(project: boolean): void {
   backup(target);
   writeSettings(target, updated);
 
-  if (fs.existsSync(scriptDest)) {
-    fs.rmSync(scriptDest);
-    const scriptDir = path.dirname(scriptDest);
-    if (fs.existsSync(scriptDir) && fs.readdirSync(scriptDir).length === 0) fs.rmdirSync(scriptDir);
+  // Only delete the shared script when no hooks remain in ANY scope.
+  // Known limitation: project-scope hooks in OTHER projects (not this cwd)
+  // cannot be detected — we'd have to scan the entire filesystem.
+  const otherScope = settingsPathFor({ project: !project });
+  const { remove, reason } = shouldRemoveScript(updated, otherScope, (p) => fs.readFileSync(p, "utf-8"));
+
+  if (remove) {
+    try {
+      fs.rmSync(scriptDest);
+      const scriptDir = path.dirname(scriptDest);
+      if (fs.readdirSync(scriptDir).length === 0) fs.rmSync(scriptDir, { recursive: true });
+    } catch (err) {
+      if ((err as NodeJS.ErrnoException).code !== "ENOENT") throw err;
+      // Script already absent — nothing to do
+    }
+  } else {
+    console.log(`agent-workshop: shared hook-runner kept (${reason})`);
   }
 
   console.log(`agent-workshop: removed hooks from ${target}`);

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { findOurHooks, installHooks, MANAGED_EVENTS, uninstallHooks, type ClaudeSettings } from "./settings.js";
+import { findOurHooks, installHooks, MANAGED_EVENTS, uninstallHooks, shouldRemoveScript, type ClaudeSettings } from "./settings.js";
 
 const SCRIPT_PATH = "/home/user/.claude/agent-workshop/hook-runner.mjs";
 
@@ -88,6 +88,65 @@ describe("uninstallHooks", () => {
   it("is a no-op on settings with no hooks key", () => {
     const settings: ClaudeSettings = { permissions: { allow: [] } };
     expect(uninstallHooks(settings)).toEqual(settings);
+  });
+});
+
+describe("shouldRemoveScript", () => {
+  const installed = installHooks({}, SCRIPT_PATH);
+  const uninstalled = uninstallHooks(installed);
+
+  function mockReader(content: string | null): (path: string) => string {
+    return () => {
+      if (content === null) {
+        const err = new Error("ENOENT") as NodeJS.ErrnoException;
+        err.code = "ENOENT";
+        throw err;
+      }
+      return content;
+    };
+  }
+
+  it("returns remove:true when neither scope has hooks", () => {
+    const result = shouldRemoveScript(uninstalled, "/fake/path", mockReader(null));
+    expect(result.remove).toBe(true);
+  });
+
+  it("returns remove:false when the other scope still has hooks", () => {
+    const otherScopeContent = JSON.stringify(installed);
+    const result = shouldRemoveScript(uninstalled, "/other/settings.json", mockReader(otherScopeContent));
+    expect(result.remove).toBe(false);
+    expect(result.reason).toContain("hooks remain");
+  });
+
+  it("returns remove:false when the target scope still has hooks (defensive)", () => {
+    // Target wasn't fully uninstalled — shouldn't happen but defensive check
+    const result = shouldRemoveScript(installed, "/fake/path", mockReader(null));
+    expect(result.remove).toBe(false);
+    expect(result.reason).toContain("target scope");
+  });
+
+  it("returns remove:true when other scope file does not exist (ENOENT)", () => {
+    const result = shouldRemoveScript(uninstalled, "/nonexistent", mockReader(null));
+    expect(result.remove).toBe(true);
+  });
+
+  it("returns remove:true when other scope file is empty", () => {
+    const result = shouldRemoveScript(uninstalled, "/empty", mockReader(""));
+    expect(result.remove).toBe(true);
+  });
+
+  it("returns remove:false (fail safe) when other scope file is malformed JSON", () => {
+    const result = shouldRemoveScript(uninstalled, "/bad", mockReader("{invalid json!!!"));
+    expect(result.remove).toBe(false);
+    expect(result.reason).toContain("could not read");
+  });
+
+  it("returns remove:true when other scope has hooks from another tool (not ours)", () => {
+    const otherTool: ClaudeSettings = {
+      hooks: { PreToolUse: [{ matcher: "", hooks: [{ type: "command", command: "other-tool" }] }] }
+    };
+    const result = shouldRemoveScript(uninstalled, "/other", mockReader(JSON.stringify(otherTool)));
+    expect(result.remove).toBe(true);
   });
 });
 
