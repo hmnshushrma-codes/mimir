@@ -1,5 +1,12 @@
 # Mimir
 
+**[Live Demo](https://mimir-demo.pages.dev)** — try it in your browser, no install needed
+
+> The demo is fully simulated — no real sessions, API keys, or backend required.
+
+<!-- TODO: Replace with actual GIF once recorded -->
+<!-- ![Mimir Demo](docs/demo.gif) -->
+
 Live animated visualization of Claude Code sessions — watch your AI agents
 work at their desks in a workshop room.
 

@@ -7,6 +7,8 @@ import { DebugView } from "./views/DebugView.js";
 import { WorkshopView } from "./views/WorkshopView.js";
 import { DashboardView } from "./views/DashboardView.js";
 import { AnalyticsView } from "./views/AnalyticsView.js";
+import { DemoControlBar } from "./components/DemoControlBar.js";
+import { isDemoMode, triggerDemoEvent } from "./data/demoSource.js";
 
 const API_BASE = window.location.origin;
 
@@ -96,6 +98,8 @@ export function App() {
         </button>
         <ConnectionBadge status={status} />
       </header>
+
+      {isDemoMode() && <DemoControlBar onTrigger={triggerDemoEvent} />}
 
       <main className="main-content">
         {tab === "workshop" && <WorkshopView />}

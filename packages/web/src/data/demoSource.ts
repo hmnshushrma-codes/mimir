@@ -1,6 +1,7 @@
 import { WorkshopModel, serializeAgent, serializeProject, serializeSession, type HookEventEnvelope } from "@agent-workshop/shared";
 import { useWorkshopStore } from "../store/useWorkshopStore.js";
 import { DEMO_STEPS, DEMO_TOTAL_DURATION_MS, STRESS_STEPS, STRESS_TOTAL_DURATION_MS } from "./demoScenario.js";
+import { PUBLIC_DEMO_STEPS, PUBLIC_DEMO_TOTAL_MS } from "./publicDemoScript.js";
 
 const SWEEP_INTERVAL_MS = 500;
 const DEPART_AFTER_MS = 4000;
@@ -21,10 +22,59 @@ function isStressMode(): boolean {
   return new URLSearchParams(window.location.search).get("stress") === "1";
 }
 
+function isPublicDemo(): boolean {
+  return import.meta.env.VITE_DEMO === "true";
+}
+
+/** Global model reference for the demo control bar to inject events. */
+let activeModel: WorkshopModel | null = null;
+let activeSessionId: string | null = null;
+let triggerCounter = 0;
+
+/** Inject a manual event from the control bar. */
+export function triggerDemoEvent(type: string): void {
+  if (!activeModel || !activeSessionId) return;
+  const now = new Date().toISOString();
+  const id = `trigger-${++triggerCounter}`;
+  const project = isPublicDemo()
+    ? PUBLIC_DEMO_STEPS[0].project
+    : DEMO_STEPS[0].project;
+
+  let payload: Record<string, unknown>;
+  switch (type) {
+    case "permission":
+      payload = { hook_event_name: "Notification", notification_type: "permission_prompt", message: "Allow this action?" };
+      break;
+    case "spawn":
+      payload = { hook_event_name: "SubagentStart", agent_id: `demo-agent-${id}`, agent_type: "general-purpose", task_description: `Triggered task ${id}` };
+      break;
+    case "error":
+      payload = { hook_event_name: "PreToolUse", tool_name: "Bash", tool_input: { command: "npm test" }, tool_use_id: `err-pre-${id}` };
+      // Fire the pre, then immediately fire a failure
+      {
+        const env1 = { ...payload, session_id: activeSessionId, timestamp: now } as HookEventEnvelope;
+        const r1 = activeModel.ingest(env1, project);
+        useWorkshopStore.getState().applyEvent(r1.workshopEvent, serializeProject(r1.project), serializeAgent(r1.agent));
+      }
+      payload = { hook_event_name: "PostToolUseFailure", tool_name: "Bash", tool_input: {}, error: "exit 1", tool_use_id: `err-pre-${id}` };
+      break;
+    case "finish":
+      payload = { hook_event_name: "Stop", last_assistant_message: "All done!" };
+      break;
+    default:
+      return;
+  }
+
+  const envelope = { ...payload, session_id: activeSessionId, timestamp: now } as HookEventEnvelope;
+  const { workshopEvent, project: proj, agent } = activeModel.ingest(envelope, project);
+  useWorkshopStore.getState().applyEvent(workshopEvent, serializeProject(proj), serializeAgent(agent));
+}
+
 export function connectDemoSource(): () => void {
+  const publicDemo = isPublicDemo();
   const stress = isStressMode();
-  const steps = stress ? STRESS_STEPS : DEMO_STEPS;
-  const totalDurationMs = stress ? STRESS_TOTAL_DURATION_MS : DEMO_TOTAL_DURATION_MS;
+  const steps = publicDemo ? PUBLIC_DEMO_STEPS : (stress ? STRESS_STEPS : DEMO_STEPS);
+  const totalDurationMs = publicDemo ? PUBLIC_DEMO_TOTAL_MS : (stress ? STRESS_TOTAL_DURATION_MS : DEMO_TOTAL_DURATION_MS);
 
   const timers: ReturnType<typeof setTimeout>[] = [];
   let sweepTimer: ReturnType<typeof setInterval> | null = null;
@@ -39,6 +89,8 @@ export function connectDemoSource(): () => void {
     loopCount += 1;
     const sessionSuffix = `-l${loopCount}`;
     const model = new WorkshopModel();
+    activeModel = model;
+    activeSessionId = `${steps[0]?.sessionId ?? "demo"}${sessionSuffix}`;
 
     if (sweepTimer) clearInterval(sweepTimer);
     sweepTimer = setInterval(() => {
@@ -91,6 +143,7 @@ export function connectDemoSource(): () => void {
 }
 
 export function isDemoMode(): boolean {
+  if (import.meta.env.VITE_DEMO === "true") return true;
   if (import.meta.env.MODE === "demo") return true;
   if (typeof window === "undefined") return false;
   return new URLSearchParams(window.location.search).get("demo") === "1";

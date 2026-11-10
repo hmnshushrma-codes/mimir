@@ -16,6 +16,7 @@ import {
   generatePromptRecommendation,
 } from "@agent-workshop/shared";
 import { useWorkshopStore } from "../store/useWorkshopStore.js";
+import { isDemoMode } from "../data/demoSource.js";
 
 const API = window.location.origin;
 
@@ -346,7 +347,7 @@ function TimelinePanel({ sessions }: { sessions: StoredSessionAnalytics[] }) {
   const target = selectedSession ?? sessions[0]?.sessionId;
 
   useEffect(() => {
-    if (!target) return;
+    if (!target || isDemoMode()) return;
     fetch(`${API}/analytics/sessions/${target}/tools`)
       .then((r) => r.ok ? r.json() : [])
       .then((data) => { setToolCalls(data); setReplayIndex(null); setPlaying(false); })
@@ -500,6 +501,11 @@ export function AnalyticsView() {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
+    // In demo mode, skip all backend calls — analytics view shows empty state
+    if (isDemoMode()) {
+      setLoading(false);
+      return;
+    }
     let cancelled = false;
     async function load() {
       try {

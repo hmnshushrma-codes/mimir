@@ -1,0 +1,40 @@
+name: Deploy Demo to Cloudflare Pages
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      deployments: write
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: "pnpm"
+
+      - run: pnpm install --frozen-lockfile
+
+      # Build the shared package first (web depends on it)
+      - run: pnpm --filter @agent-workshop/shared run build
+
+      # Build the web package with VITE_DEMO=true
+      - run: pnpm --filter @agent-workshop/web run build
+        env:
+          VITE_DEMO: "true"
+
+      - name: Deploy to Cloudflare Pages
+        uses: cloudflare/wrangler-action@v3
+        with:
+          apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          command: pages deploy packages/web/dist --project-name=mimir-demo --branch=${{ github.head_ref || 'main' }}
