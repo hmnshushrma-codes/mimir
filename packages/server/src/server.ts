@@ -12,6 +12,7 @@ import {
   serializeAgent,
   serializeProject,
   serializeSession,
+  buildSessionAnalytics,
   type ProjectRecord,
   type SessionRecord
 } from "@agent-workshop/shared";
@@ -21,15 +22,25 @@ import {
   purgeOldData,
   getProjectNotes,
   getSessionRecap,
+  getSessionAnalytics,
+  getToolSummaries,
   insertEvent,
+  insertToolCallAnalytics,
   listAllEventsRaw,
+  listPermissionEvents,
   listProjects,
+  listSessionAnalytics,
   listSessionEvents,
   listSessions,
+  listToolCallAnalyticsBySession,
+  getPendingPermissions,
   searchEvents,
+  updateToolCallAnalytics,
+  upsertPermissionEvent,
   upsertProject,
   upsertProjectNotes,
   upsertSession,
+  upsertSessionAnalytics,
   upsertSessionRecap,
   type StoredEventRow
 } from "./db.js";
@@ -213,6 +224,84 @@ export function buildApp({
 
     hub.broadcast({ type: "event", payload: workshopEvent, project: serializeProject(project), agent: serializeAgent(agent) });
 
+    // ── Analytics persistence ──
+    // Track tool call lifecycle
+    if (workshopEvent.hookEventName === "PreToolUse" && workshopEvent.toolUseId) {
+      insertToolCallAnalytics(db, {
+        toolUseId: workshopEvent.toolUseId,
+        sessionId: workshopEvent.sessionId,
+        agentId: workshopEvent.agentId,
+        toolName: workshopEvent.toolName ?? "unknown",
+        category: workshopEvent.category,
+        status: "running",
+        target: workshopEvent.target,
+        startedAt: workshopEvent.timestamp,
+        finishedAt: null,
+        durationMs: null,
+        isRetry: false, // Retry detection is done at query time via buildToolCallAnalytics
+      });
+    }
+    if ((workshopEvent.hookEventName === "PostToolUse" || workshopEvent.hookEventName === "PostToolUseFailure") && workshopEvent.toolUseId) {
+      const status = workshopEvent.hookEventName === "PostToolUse" ? "succeeded" : "failed";
+      // Compute duration from the active tool call if available
+      const activeTc = agent.activeToolCalls.get(workshopEvent.toolUseId) ?? agent.finishedToolCalls.find((tc) => tc.toolUseId === workshopEvent.toolUseId);
+      const durationMs = activeTc?.durationMs ?? null;
+      updateToolCallAnalytics(db, workshopEvent.toolUseId, status, workshopEvent.timestamp, durationMs ?? 0);
+    }
+    // Track permission events
+    if (workshopEvent.hookEventName === "Notification") {
+      const notificationType = (envelope as { notification_type?: string }).notification_type;
+      if (notificationType === "permission_prompt") {
+        upsertPermissionEvent(db, {
+          id: `perm-${workshopEvent.sessionId}-${workshopEvent.agentId}-${workshopEvent.timestamp}`,
+          sessionId: workshopEvent.sessionId,
+          agentId: workshopEvent.agentId,
+          toolName: null,
+          commandPreview: workshopEvent.target,
+          requestedAt: workshopEvent.timestamp,
+          decidedAt: null,
+          decision: "pending",
+          waitingDurationMs: null,
+          requestType: "permission",
+        });
+      }
+    }
+    // Resolve pending permission events: when a PreToolUse arrives for an agent
+    // that had a pending permission, it means the user approved. Likewise, if a
+    // Stop arrives with pending permissions, they were effectively cancelled.
+    if (workshopEvent.hookEventName === "PreToolUse" || workshopEvent.hookEventName === "Stop") {
+      const pending = getPendingPermissions(db);
+      for (const perm of pending) {
+        if (perm.sessionId === workshopEvent.sessionId && perm.agentId === workshopEvent.agentId) {
+          const decision = workshopEvent.hookEventName === "Stop" ? "cancelled" : "approved";
+          const waitMs = Date.parse(workshopEvent.timestamp) - Date.parse(perm.requestedAt);
+          upsertPermissionEvent(db, {
+            ...perm,
+            decidedAt: workshopEvent.timestamp,
+            decision,
+            waitingDurationMs: waitMs > 0 ? waitMs : null,
+          });
+        }
+      }
+    }
+    // Update session analytics on every event
+    const sessionAnalytics = buildSessionAnalytics(session, (envelope as { prompt?: string }).prompt ?? null);
+    upsertSessionAnalytics(db, {
+      sessionId: sessionAnalytics.sessionId,
+      projectId: sessionAnalytics.projectId,
+      startedAt: sessionAnalytics.startedAt,
+      endedAt: sessionAnalytics.endedAt,
+      durationMs: sessionAnalytics.durationMs,
+      agentCount: sessionAnalytics.agentCount,
+      subagentCount: sessionAnalytics.subagentCount,
+      toolCallCount: sessionAnalytics.toolCallCount,
+      successfulToolCalls: sessionAnalytics.successfulToolCalls,
+      failedToolCalls: sessionAnalytics.failedToolCalls,
+      permissionRequests: sessionAnalytics.permissionRequests,
+      prompt: sessionAnalytics.prompt,
+      computedAt: new Date().toISOString(),
+    });
+
     enrichSubagentCorrelation(model, envelope, (sessionId, agentId) => {
       const confirmedAgent = model.getSession(sessionId)?.agents.get(agentId);
       if (confirmedAgent) {
@@ -322,6 +411,32 @@ export function buildApp({
       }
     });
     return result;
+  });
+
+  // ── Analytics API endpoints ──
+
+  app.get("/analytics/sessions", async () => {
+    return listSessionAnalytics(db);
+  });
+
+  app.get<{ Params: { id: string } }>("/analytics/sessions/:id", async (request) => {
+    return getSessionAnalytics(db, request.params.id) ?? { error: "not found" };
+  });
+
+  app.get<{ Params: { id: string } }>("/analytics/sessions/:id/tools", async (request) => {
+    return listToolCallAnalyticsBySession(db, request.params.id);
+  });
+
+  app.get<{ Querystring: { sessionId?: string } }>("/analytics/tools/summary", async (request) => {
+    return getToolSummaries(db, request.query.sessionId);
+  });
+
+  app.get<{ Querystring: { sessionId?: string } }>("/analytics/permissions", async (request) => {
+    return listPermissionEvents(db, request.query.sessionId);
+  });
+
+  app.get("/analytics/permissions/pending", async () => {
+    return getPendingPermissions(db);
   });
 
   const sweep = setInterval(() => {
