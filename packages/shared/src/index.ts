@@ -12,3 +12,4 @@ export * from "./ws-protocol.js";
 export * from "./analytics.js";
 export * from "./analytics-builders.js";
 export * from "./token-accounting.js";
+export * from "./cost-intelligence.js";
