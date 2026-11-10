@@ -1625,3 +1625,177 @@ body {
   background: var(--surface);
   border-color: var(--accent);
 }
+
+/* ---------- Mobile responsive ---------- */
+
+@media (max-width: 768px) {
+  .app-header {
+    flex-wrap: wrap;
+    gap: 8px;
+    padding: 8px 10px;
+  }
+  .app-title {
+    font-size: 14px;
+  }
+  .tabs {
+    order: 10;
+    width: 100%;
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+    gap: 2px;
+  }
+  .tab-button {
+    font-size: 11px;
+    padding: 5px 8px;
+    white-space: nowrap;
+  }
+  .spacer {
+    display: none;
+  }
+  .debug-overlay-toggle {
+    font-size: 10px;
+    margin-right: 4px;
+  }
+  .clear-history-btn {
+    font-size: 10px;
+    padding: 2px 6px;
+    margin-right: 4px;
+  }
+
+  /* Workshop view */
+  .main-content {
+    overflow-x: hidden;
+  }
+  .desk-area {
+    min-width: 0;
+    max-width: 100%;
+  }
+  .desk-area-floor {
+    flex-direction: column;
+    align-items: center;
+  }
+  .desk-area-workers {
+    justify-content: center;
+  }
+  .desk-area-worker-slot {
+    min-width: 120px;
+    padding-top: 14px;
+  }
+  .desk-area-finished {
+    gap: 6px 8px;
+  }
+  .foreman-desk svg {
+    width: 160px;
+    height: auto;
+  }
+  .worker-desk svg {
+    width: 110px;
+    height: auto;
+  }
+
+  /* Analytics view */
+  .analytics-view {
+    padding: 10px;
+  }
+  .analytics-subtabs {
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+    gap: 2px;
+    padding-bottom: 6px;
+  }
+  .subtab {
+    font-size: 11px;
+    padding: 5px 10px;
+    white-space: nowrap;
+  }
+  .analytics-grid {
+    grid-template-columns: repeat(2, 1fr);
+    gap: 8px;
+  }
+  .analytics-card {
+    padding: 10px;
+  }
+  .analytics-card-value {
+    font-size: 22px;
+  }
+  .analytics-card-label {
+    font-size: 9px;
+  }
+  .analytics-table {
+    font-size: 10px;
+    display: block;
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+  }
+  .analytics-table th,
+  .analytics-table td {
+    padding: 4px 6px;
+    white-space: nowrap;
+  }
+  .prompt-card {
+    padding: 8px;
+  }
+  .prompt-card-header {
+    flex-direction: column;
+    gap: 4px;
+  }
+  .prompt-text {
+    white-space: normal;
+  }
+
+  /* Timeline */
+  .timeline-event {
+    font-size: 10px;
+    gap: 4px;
+    padding: 3px 4px;
+  }
+  .timeline-time {
+    font-size: 9px;
+    min-width: 40px;
+  }
+  .timeline-tool {
+    min-width: 40px;
+    font-size: 10px;
+  }
+
+  /* Demo control bar */
+  .demo-control-bar {
+    flex-wrap: wrap;
+    gap: 4px;
+    padding: 4px 8px;
+  }
+  .demo-btn {
+    font-size: 10px;
+    padding: 3px 7px;
+  }
+
+  /* Side panel */
+  .side-panel {
+    width: 100% !important;
+    max-width: 100% !important;
+  }
+
+  /* Dashboard */
+  .dashboard-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 480px) {
+  .analytics-grid {
+    grid-template-columns: 1fr 1fr;
+  }
+  .foreman-desk svg {
+    width: 140px;
+  }
+  .worker-desk svg {
+    width: 90px;
+  }
+  .desk-area-worker-slot {
+    min-width: 100px;
+  }
+  .tab-button {
+    font-size: 10px;
+    padding: 4px 6px;
+  }
+}
