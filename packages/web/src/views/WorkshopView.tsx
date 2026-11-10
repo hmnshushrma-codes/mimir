@@ -8,6 +8,7 @@ import { usePrefersDarkMode } from "../hooks/usePrefersDarkMode.js";
 import { CHARACTER_PALETTE } from "../characters/palette.js";
 import { teamColorFor } from "../characters/teamColor.js";
 import { loadAvatar, saveAvatar, type AvatarConfig } from "../characters/avatarConfig.js";
+import { isDemoMode } from "../data/demoSource.js";
 import { FilterChips } from "../components/FilterChips.js";
 import { RoomBackdrop } from "../components/RoomBackdrop.js";
 import { ProjectSign } from "../components/ProjectSign.js";
@@ -119,7 +120,7 @@ export function WorkshopView() {
   return (
     <div className="workshop-scene">
       <div className="workshop-floor">
-        <RoomBackdrop />
+        {!isDemoMode() && <RoomBackdrop />}
 
         <div className="room-content">
           <FilterChips
@@ -142,10 +143,12 @@ export function WorkshopView() {
                     color={projectColor(projectSessions, isDark)}
                   />
                   <div className="project-desks">
-                    {/* One User per project */}
-                    <div className="project-user-desk">
-                      <UserDesk latestPrompt={projectPrompt} avatar={avatar} onEditAvatar={() => setShowWizard(true)} />
-                    </div>
+                    {/* User desk hidden in demo mode — no real user avatar */}
+                    {!isDemoMode() && (
+                      <div className="project-user-desk">
+                        <UserDesk latestPrompt={projectPrompt} avatar={avatar} onEditAvatar={() => setShowWizard(true)} />
+                      </div>
+                    )}
                     <AnimatePresence>
                       {projectSessions.map((session) => (
                         <DeskArea
@@ -184,7 +187,7 @@ export function WorkshopView() {
         )}
       </AnimatePresence>
 
-      {showWizard && (
+      {showWizard && !isDemoMode() && (
         <AvatarWizard initial={avatar} onSave={handleSaveAvatar} onClose={() => setShowWizard(false)} />
       )}
     </div>

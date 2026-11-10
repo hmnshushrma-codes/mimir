@@ -77,26 +77,30 @@ export function App() {
           </button>
         </nav>
         <span className="spacer" />
-        <label className="debug-overlay-toggle">
-          <input type="checkbox" checked={debugOverlayEnabled} onChange={toggleDebugOverlay} />
-          State labels
-        </label>
-        <button
-          className="clear-history-btn"
-          onClick={async () => {
-            if (!confirm("Clear all old sessions? Active sessions will be kept.")) return;
-            try {
-              const res = await fetch(`${API_BASE}/history`, { method: "DELETE" });
-              if (!res.ok) throw new Error(await res.text());
-            } catch (e) {
-              console.error("Failed to clear history", e);
-            }
-          }}
-          title="Clear old sessions from database"
-        >
-          Clear history
-        </button>
-        <ConnectionBadge status={status} />
+        {!isDemoMode() && (
+          <>
+            <label className="debug-overlay-toggle">
+              <input type="checkbox" checked={debugOverlayEnabled} onChange={toggleDebugOverlay} />
+              State labels
+            </label>
+            <button
+              className="clear-history-btn"
+              onClick={async () => {
+                if (!confirm("Clear all old sessions? Active sessions will be kept.")) return;
+                try {
+                  const res = await fetch(`${API_BASE}/history`, { method: "DELETE" });
+                  if (!res.ok) throw new Error(await res.text());
+                } catch (e) {
+                  console.error("Failed to clear history", e);
+                }
+              }}
+              title="Clear old sessions from database"
+            >
+              Clear history
+            </button>
+            <ConnectionBadge status={status} />
+          </>
+        )}
       </header>
 
       {isDemoMode() && <DemoControlBar onTrigger={triggerDemoEvent} />}

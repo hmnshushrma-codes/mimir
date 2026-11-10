@@ -577,14 +577,16 @@ body {
   flex-wrap: wrap;
   gap: 16px;
   align-items: flex-start;
+  justify-content: center;
 }
 
 .project-group {
   display: flex;
   flex-direction: column;
-  align-items: flex-start;
+  align-items: center;
   gap: 4px;
-  flex: 0 1 auto;
+  flex: 1 1 auto;
+  max-width: 100%;
 }
 
 .project-sign {
@@ -597,6 +599,7 @@ body {
   flex-wrap: wrap;
   gap: 12px;
   align-items: flex-start;
+  justify-content: center;
 }
 
 .project-user-desk {
