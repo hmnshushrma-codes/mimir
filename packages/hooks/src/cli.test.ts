@@ -1,6 +1,6 @@
 import { spawn } from "node:child_process";
 import { createServer, type Server } from "node:http";
-import { mkdtempSync, readFileSync, rmSync, existsSync } from "node:fs";
+import { mkdtempSync, mkdirSync, readFileSync, rmSync, existsSync } from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
@@ -13,9 +13,9 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 // package's "pretest" script) to exercise that path faithfully.
 const CLI = path.join(__dirname, "..", "dist", "cli.js");
 
-function runCli(args: string[], env: Record<string, string>): Promise<{ stdout: string; exitCode: number | null }> {
+function runCli(args: string[], env: Record<string, string>, cwd?: string): Promise<{ stdout: string; exitCode: number | null }> {
   return new Promise((resolve, reject) => {
-    const child = spawn(process.execPath, [CLI, ...args], { env: { ...process.env, ...env } });
+    const child = spawn(process.execPath, [CLI, ...args], { env: { ...process.env, ...env }, cwd });
     let stdout = "";
     child.stdout.on("data", (d) => (stdout += d.toString()));
     child.on("error", reject);
@@ -86,5 +86,64 @@ describe("agent-workshop CLI", () => {
 
     const status = await runCli(["status"], { ...env, AGENT_WORKSHOP_URL: "http://127.0.0.1:1/events" });
     expect(status.stdout).toContain("not installed");
+  }, 20000);
+
+  it("install --project writes hooks to the project settings file", async () => {
+    const env = freshHome();
+    const projectDir = path.join(home, "my-project");
+    mkdirSync(projectDir, { recursive: true });
+    const result = await runCli(["install", "--project"], env, projectDir);
+    expect(result.exitCode).toBe(0);
+
+    const projectSettings = path.join(projectDir, ".claude", "settings.json");
+    expect(existsSync(projectSettings)).toBe(true);
+    const settings = JSON.parse(readFileSync(projectSettings, "utf-8"));
+    expect(settings.hooks?.SessionStart).toBeDefined();
+
+    const scriptPath = path.join(home, ".claude", "agent-workshop", "hook-runner.mjs");
+    expect(existsSync(scriptPath)).toBe(true);
+  }, 20000);
+
+  it("uninstall --project keeps the script when user-scope hooks exist", async () => {
+    const env = freshHome();
+    const projectDir = path.join(home, "my-project");
+    mkdirSync(projectDir, { recursive: true });
+
+    // Install at both scopes
+    await runCli(["install"], env);
+    await runCli(["install", "--project"], env, projectDir);
+
+    const scriptPath = path.join(home, ".claude", "agent-workshop", "hook-runner.mjs");
+    expect(existsSync(scriptPath)).toBe(true);
+
+    // Uninstall only project scope
+    const result = await runCli(["uninstall", "--project"], env, projectDir);
+    expect(result.exitCode).toBe(0);
+    expect(result.stdout).toContain("hook-runner kept");
+
+    // Script must still exist — user-scope hooks depend on it
+    expect(existsSync(scriptPath)).toBe(true);
+
+    // User-scope hooks must still be intact
+    const userSettings = JSON.parse(readFileSync(path.join(home, ".claude", "settings.json"), "utf-8"));
+    expect(userSettings.hooks?.SessionStart).toBeDefined();
+  }, 20000);
+
+  it("uninstall --user keeps the script when project-scope hooks exist", async () => {
+    const env = freshHome();
+    const projectDir = path.join(home, "my-project");
+    mkdirSync(projectDir, { recursive: true });
+
+    // Install at both scopes
+    await runCli(["install"], env);
+    await runCli(["install", "--project"], env, projectDir);
+
+    // Uninstall only user scope — but run from the project dir so it finds project hooks
+    const result = await runCli(["uninstall"], env, projectDir);
+    expect(result.exitCode).toBe(0);
+    expect(result.stdout).toContain("hook-runner kept");
+
+    const scriptPath = path.join(home, ".claude", "agent-workshop", "hook-runner.mjs");
+    expect(existsSync(scriptPath)).toBe(true);
   }, 20000);
 });
