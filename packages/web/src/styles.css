@@ -593,14 +593,15 @@ body {
 
 .project-desks {
   display: flex;
-  flex-wrap: wrap;
-  gap: 12px;
+  flex-wrap: nowrap;
+  gap: 16px;
   align-items: flex-start;
 }
 
 .project-user-desk {
-  align-self: flex-start;
+  flex-shrink: 0;
   position: relative;
+  padding-top: 20px;
 }
 
 /* ---------- Desk area (one session) ---------- */
@@ -1691,6 +1692,9 @@ body {
 @media (max-width: 767px) {
   .desk-grid {
     grid-template-columns: 1fr;
+  }
+  .project-desks {
+    flex-wrap: wrap;
   }
   .app-header {
     flex-wrap: wrap;
