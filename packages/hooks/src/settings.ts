@@ -107,6 +107,53 @@ export function installHooks(settings: ClaudeSettings, hookScriptPath: string): 
 }
 
 /**
+ * Determines whether the shared hook-runner script can safely be deleted.
+ * Returns { remove: true } only when no hooks of ours remain in EITHER scope
+ * after the uninstall. If the other scope's settings are unreadable (malformed
+ * JSON, permission error), returns { remove: false } with a warning — fail
+ * safe rather than risk breaking the other scope.
+ *
+ * @param updatedTargetSettings The in-memory settings for the scope being
+ *   uninstalled (already has our hooks stripped — check this, not the file).
+ * @param otherScopeSettingsPath Path to the OTHER scope's settings.json.
+ * @param readFile Injected reader for testability (defaults to fs.readFileSync).
+ *
+ * Known limitation: project-scope hooks in OTHER projects (i.e. not the cwd)
+ * cannot be detected — we'd have to scan every .claude/settings.json on disk.
+ * This means `uninstall --user` could still delete the script while another
+ * project's hooks point at it. A comment in the caller notes this.
+ */
+export function shouldRemoveScript(
+  updatedTargetSettings: ClaudeSettings,
+  otherScopeSettingsPath: string,
+  readFile: (path: string) => string
+): { remove: boolean; reason: string } {
+  const read = readFile;
+  // Check target scope (already uninstalled in memory)
+  if (findOurHooks(updatedTargetSettings).length > 0) {
+    return { remove: false, reason: "hooks remain in the target scope" };
+  }
+
+  // Check other scope's settings file
+  try {
+    const raw = read(otherScopeSettingsPath);
+    const parsed = JSON.parse(raw.trim() || "{}") as ClaudeSettings;
+    if (findOurHooks(parsed).length > 0) {
+      return { remove: false, reason: `hooks remain in ${otherScopeSettingsPath}` };
+    }
+  } catch (err) {
+    if ((err as NodeJS.ErrnoException).code === "ENOENT") {
+      // File doesn't exist — no hooks in that scope
+    } else {
+      // Malformed JSON or permission error — fail safe, keep the script
+      return { remove: false, reason: `could not read ${otherScopeSettingsPath}: ${(err as Error).message}` };
+    }
+  }
+
+  return { remove: true, reason: "no hooks remain in any scope" };
+}
+
+/**
  * Removes exactly our hook entries, deleting now-empty groups and, if no
  * hooks remain at all, the `hooks` key itself — so the file comes back to
  * exactly what it would have looked like had we never installed, apart from
