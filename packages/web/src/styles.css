@@ -1629,9 +1629,75 @@ body {
   border-color: var(--accent);
 }
 
-/* ---------- Mobile responsive ---------- */
+/* ---------- Responsive breakpoints ---------- */
+/*
+ * xl: 1280px+  (desktop)
+ * lg: 1024px+  (small desktop / landscape tablet)
+ * md: 768px+   (iPad portrait)
+ * sm: 480px+   (large phone)
+ * xs: < 480px  (small phone)
+ */
 
-@media (max-width: 768px) {
+/* ── XL desktop (1280+) ── */
+@media (min-width: 1280px) {
+  .room-content {
+    max-width: 1400px;
+    margin: 0 auto;
+  }
+  .analytics-view {
+    max-width: 1200px;
+  }
+  .desk-grid {
+    gap: 24px;
+  }
+  .analytics-grid {
+    grid-template-columns: repeat(6, 1fr);
+  }
+}
+
+/* ── LG desktop / landscape tablet (1024–1279) ── */
+@media (min-width: 1024px) and (max-width: 1279px) {
+  .room-content {
+    max-width: 1100px;
+    margin: 0 auto;
+  }
+  .analytics-grid {
+    grid-template-columns: repeat(6, 1fr);
+  }
+}
+
+/* ── MD iPad portrait (768–1023) ── */
+@media (min-width: 768px) and (max-width: 1023px) {
+  .room-content {
+    max-width: 900px;
+    margin: 0 auto;
+  }
+  .analytics-grid {
+    grid-template-columns: repeat(3, 1fr);
+  }
+  .desk-area-workers {
+    gap: 8px 10px;
+  }
+  .desk-area-worker-slot {
+    min-width: 130px;
+  }
+}
+
+/* ── SM / MD shared: tablet and below (< 1024) ── */
+@media (max-width: 1023px) {
+  .analytics-table {
+    display: block;
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+  }
+  .analytics-table th,
+  .analytics-table td {
+    white-space: nowrap;
+  }
+}
+
+/* ── SM phone (480–767) ── */
+@media (max-width: 767px) {
   .app-header {
     flex-wrap: wrap;
     gap: 8px;
@@ -1665,9 +1731,12 @@ body {
     margin-right: 4px;
   }
 
-  /* Workshop view */
   .main-content {
     overflow-x: hidden;
+    padding: 8px;
+  }
+  .room-content {
+    padding: 6px 8px 12px;
   }
   .desk-area {
     min-width: 0;
@@ -1696,7 +1765,6 @@ body {
     height: auto;
   }
 
-  /* Analytics view */
   .analytics-view {
     padding: 10px;
   }
@@ -1724,16 +1792,9 @@ body {
   .analytics-card-label {
     font-size: 9px;
   }
-  .analytics-table {
-    font-size: 10px;
-    display: block;
-    overflow-x: auto;
-    -webkit-overflow-scrolling: touch;
-  }
   .analytics-table th,
   .analytics-table td {
     padding: 4px 6px;
-    white-space: nowrap;
   }
   .prompt-card {
     padding: 8px;
@@ -1746,7 +1807,6 @@ body {
     white-space: normal;
   }
 
-  /* Timeline */
   .timeline-event {
     font-size: 10px;
     gap: 4px;
@@ -1761,7 +1821,6 @@ body {
     font-size: 10px;
   }
 
-  /* Demo control bar */
   .demo-control-bar {
     flex-wrap: wrap;
     gap: 4px;
@@ -1772,19 +1831,18 @@ body {
     padding: 3px 7px;
   }
 
-  /* Side panel */
   .side-panel {
     width: 100% !important;
     max-width: 100% !important;
   }
 
-  /* Dashboard */
   .dashboard-grid {
     grid-template-columns: 1fr;
   }
 }
 
-@media (max-width: 480px) {
+/* ── XS small phone (< 480) ── */
+@media (max-width: 479px) {
   .analytics-grid {
     grid-template-columns: 1fr 1fr;
   }
@@ -1800,5 +1858,8 @@ body {
   .tab-button {
     font-size: 10px;
     padding: 4px 6px;
+  }
+  .analytics-card-value {
+    font-size: 18px;
   }
 }
