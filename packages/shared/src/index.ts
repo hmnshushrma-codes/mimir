@@ -16,3 +16,4 @@ export * from "./cost-intelligence.js";
 export * from "./waste-detection.js";
 export * from "./prompt-quality.js";
 export * from "./prompt-improvement.js";
+export * from "./knowledge-inventory.js";
