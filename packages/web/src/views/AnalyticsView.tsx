@@ -19,7 +19,7 @@ import { useWorkshopStore } from "../store/useWorkshopStore.js";
 
 const API = window.location.origin;
 
-type SubTab = "overview" | "tools" | "agents" | "timeline" | "permissions" | "prompts";
+type SubTab = "overview" | "tools" | "agents" | "timeline" | "compare" | "permissions" | "prompts";
 
 interface StoredSessionAnalytics {
   sessionId: string;
@@ -339,6 +339,9 @@ function AgentsPanel({ sessions }: { sessions: StoredSessionAnalytics[] }) {
 function TimelinePanel({ sessions }: { sessions: StoredSessionAnalytics[] }) {
   const [selectedSession, setSelectedSession] = useState<string | null>(null);
   const [toolCalls, setToolCalls] = useState<StoredToolCallAnalytics[]>([]);
+  const [replayIndex, setReplayIndex] = useState<number | null>(null);
+  const [playing, setPlaying] = useState(false);
+  const [speed, setSpeed] = useState(1);
 
   const target = selectedSession ?? sessions[0]?.sessionId;
 
@@ -346,14 +349,26 @@ function TimelinePanel({ sessions }: { sessions: StoredSessionAnalytics[] }) {
     if (!target) return;
     fetch(`${API}/analytics/sessions/${target}/tools`)
       .then((r) => r.ok ? r.json() : [])
-      .then(setToolCalls)
+      .then((data) => { setToolCalls(data); setReplayIndex(null); setPlaying(false); })
       .catch(() => setToolCalls([]));
   }, [target]);
 
+  // Replay timer
+  useEffect(() => {
+    if (!playing || replayIndex === null || replayIndex >= toolCalls.length - 1) {
+      if (playing && replayIndex !== null && replayIndex >= toolCalls.length - 1) setPlaying(false);
+      return;
+    }
+    const timer = setTimeout(() => setReplayIndex((i) => (i ?? 0) + 1), 800 / speed);
+    return () => clearTimeout(timer);
+  }, [playing, replayIndex, toolCalls.length, speed]);
+
+  const visibleCalls = replayIndex !== null ? toolCalls.slice(0, replayIndex + 1) : toolCalls;
+
   return (
     <div className="analytics-section">
-      <h3>Session Timeline</h3>
-      <div style={{ marginBottom: 10 }}>
+      <h3>Session Timeline & Replay</h3>
+      <div style={{ display: "flex", gap: 8, marginBottom: 10, alignItems: "center", flexWrap: "wrap" }}>
         <select
           value={target ?? ""}
           onChange={(e) => setSelectedSession(e.target.value)}
@@ -365,13 +380,36 @@ function TimelinePanel({ sessions }: { sessions: StoredSessionAnalytics[] }) {
             </option>
           ))}
         </select>
+        <button className="subtab" onClick={() => { setReplayIndex(0); setPlaying(true); }}>
+          {playing ? "⏸ Pause" : "▶ Replay"}
+        </button>
+        {replayIndex !== null && (
+          <>
+            <button className="subtab" onClick={() => setReplayIndex(Math.max(0, (replayIndex ?? 0) - 1))}>⏮ Prev</button>
+            <button className="subtab" onClick={() => setReplayIndex(Math.min(toolCalls.length - 1, (replayIndex ?? 0) + 1))}>Next ⏭</button>
+            <button className="subtab" onClick={() => { setReplayIndex(null); setPlaying(false); }}>Show All</button>
+            <select value={speed} onChange={(e) => setSpeed(Number(e.target.value))}
+              style={{ padding: "2px 6px", borderRadius: 4, border: "1px solid var(--border)", fontSize: 11 }}>
+              <option value={0.5}>0.5x</option>
+              <option value={1}>1x</option>
+              <option value={2}>2x</option>
+              <option value={4}>4x</option>
+            </select>
+            <span style={{ fontSize: 11, color: "var(--text-muted)" }}>
+              {(replayIndex ?? 0) + 1} / {toolCalls.length}
+            </span>
+          </>
+        )}
       </div>
-      {toolCalls.length === 0 ? (
+      {visibleCalls.length === 0 ? (
         <p className="analytics-empty">No tool calls for this session</p>
       ) : (
         <div className="timeline-list">
-          {toolCalls.map((tc) => (
-            <div key={tc.toolUseId} className={`timeline-event timeline-${tc.status}`}>
+          {visibleCalls.map((tc, i) => (
+            <div
+              key={tc.toolUseId}
+              className={`timeline-event timeline-${tc.status} ${replayIndex !== null && i === replayIndex ? "timeline-active" : ""}`}
+            >
               <span className="timeline-time">{formatTime(tc.startedAt)}</span>
               <span className={`timeline-status status-${tc.status}`}>
                 {tc.status === "succeeded" ? "✓" : tc.status === "failed" ? "✗" : "⋯"}
@@ -382,6 +420,71 @@ function TimelinePanel({ sessions }: { sessions: StoredSessionAnalytics[] }) {
             </div>
           ))}
         </div>
+      )}
+    </div>
+  );
+}
+
+// ─── Compare ────────────────────────────────────────────────────────
+
+function ComparePanel({ sessions }: { sessions: StoredSessionAnalytics[] }) {
+  const [idA, setIdA] = useState<string>("");
+  const [idB, setIdB] = useState<string>("");
+
+  const a = sessions.find((s) => s.sessionId === idA);
+  const b = sessions.find((s) => s.sessionId === idB);
+
+  if (sessions.length < 2) {
+    return <p className="analytics-empty">Need at least 2 sessions to compare</p>;
+  }
+
+  function row(label: string, va: string | number | null, vb: string | number | null) {
+    return (
+      <tr>
+        <td style={{ fontWeight: 600 }}>{label}</td>
+        <td>{va ?? "—"}</td>
+        <td>{vb ?? "—"}</td>
+      </tr>
+    );
+  }
+
+  return (
+    <div className="analytics-section">
+      <h3>Session Comparison</h3>
+      <div style={{ display: "flex", gap: 12, marginBottom: 12 }}>
+        <select value={idA} onChange={(e) => setIdA(e.target.value)}
+          style={{ flex: 1, padding: "4px 8px", borderRadius: 4, border: "1px solid var(--border)", fontSize: 12 }}>
+          <option value="">Select session A</option>
+          {sessions.map((s) => (
+            <option key={s.sessionId} value={s.sessionId}>{s.sessionId.slice(0, 8)}… — {s.prompt?.slice(0, 30) ?? "no prompt"}</option>
+          ))}
+        </select>
+        <select value={idB} onChange={(e) => setIdB(e.target.value)}
+          style={{ flex: 1, padding: "4px 8px", borderRadius: 4, border: "1px solid var(--border)", fontSize: 12 }}>
+          <option value="">Select session B</option>
+          {sessions.map((s) => (
+            <option key={s.sessionId} value={s.sessionId}>{s.sessionId.slice(0, 8)}… — {s.prompt?.slice(0, 30) ?? "no prompt"}</option>
+          ))}
+        </select>
+      </div>
+      {a && b ? (
+        <table className="analytics-table">
+          <thead><tr><th>Metric</th><th>Session A</th><th>Session B</th></tr></thead>
+          <tbody>
+            {row("Agents", a.agentCount, b.agentCount)}
+            {row("Tool Calls", a.toolCallCount, b.toolCallCount)}
+            {row("Failed", a.failedToolCalls, b.failedToolCalls)}
+            {row("Success Rate",
+              a.toolCallCount > 0 ? `${Math.round((a.successfulToolCalls / a.toolCallCount) * 100)}%` : "—",
+              b.toolCallCount > 0 ? `${Math.round((b.successfulToolCalls / b.toolCallCount) * 100)}%` : "—"
+            )}
+            {row("Permissions", a.permissionRequests, b.permissionRequests)}
+            {row("Duration", formatDuration(a.durationMs), formatDuration(b.durationMs))}
+            {row("Prompt", a.prompt?.slice(0, 50) ?? "—", b.prompt?.slice(0, 50) ?? "—")}
+          </tbody>
+        </table>
+      ) : (
+        <p className="analytics-empty">Select two sessions to compare</p>
       )}
     </div>
   );
@@ -433,6 +536,7 @@ export function AnalyticsView() {
         {subTab === "tools" && <ToolsPanel summaries={toolSummaries} />}
         {subTab === "agents" && <AgentsPanel sessions={sessions} />}
         {subTab === "timeline" && <TimelinePanel sessions={sessions} />}
+        {subTab === "compare" && <ComparePanel sessions={sessions} />}
         {subTab === "permissions" && <PermissionsPanel events={permissions} />}
         {subTab === "prompts" && <PromptsPanel sessions={sessions} />}
       </div>

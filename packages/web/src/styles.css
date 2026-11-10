@@ -1577,3 +1577,16 @@ body {
   min-width: 40px;
   text-align: right;
 }
+.timeline-active {
+  background: var(--accent);
+  color: #fff;
+  border-radius: 4px;
+}
+.timeline-active .timeline-time,
+.timeline-active .timeline-target,
+.timeline-active .timeline-duration {
+  color: rgba(255,255,255,0.8);
+}
+.timeline-active .timeline-tool {
+  color: #fff;
+}
