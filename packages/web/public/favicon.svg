@@ -1,0 +1,17 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64">
+  <!-- Head -->
+  <circle cx="32" cy="32" r="28" fill="#3a9a5c"/>
+  <!-- Eyes - white sclera -->
+  <ellipse cx="22" cy="28" rx="7" ry="7.5" fill="#fff"/>
+  <ellipse cx="42" cy="28" rx="7" ry="7.5" fill="#fff"/>
+  <!-- Pupils -->
+  <circle cx="23" cy="28" r="4.5" fill="#1b1d23"/>
+  <circle cx="43" cy="28" r="4.5" fill="#1b1d23"/>
+  <!-- Eye shine -->
+  <circle cx="25" cy="26" r="1.5" fill="#fff"/>
+  <circle cx="45" cy="26" r="1.5" fill="#fff"/>
+  <!-- Smile -->
+  <path d="M22 40 Q32 48 42 40" stroke="#1b1d23" stroke-width="2.5" fill="none" stroke-linecap="round"/>
+  <!-- Chest highlight -->
+  <ellipse cx="32" cy="48" rx="10" ry="8" fill="#fff" opacity="0.12"/>
+</svg>
