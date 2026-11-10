@@ -501,8 +501,28 @@ export function AnalyticsView() {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    // In demo mode, skip all backend calls — analytics view shows empty state
     if (isDemoMode()) {
+      // Populate with realistic simulated data — no backend calls
+      setSessions([
+        { sessionId: "demo-s1", projectId: "demo-proj-acme", startedAt: new Date(Date.now() - 3600000).toISOString(), endedAt: new Date(Date.now() - 2400000).toISOString(), durationMs: 1200000, agentCount: 4, subagentCount: 3, toolCallCount: 47, successfulToolCalls: 41, failedToolCalls: 6, permissionRequests: 2, prompt: "Build the analytics dashboard with charts and filters", computedAt: new Date().toISOString() },
+        { sessionId: "demo-s2", projectId: "demo-proj-acme", startedAt: new Date(Date.now() - 7200000).toISOString(), endedAt: new Date(Date.now() - 5400000).toISOString(), durationMs: 1800000, agentCount: 3, subagentCount: 2, toolCallCount: 62, successfulToolCalls: 55, failedToolCalls: 7, permissionRequests: 1, prompt: "Fix authentication and add rate limiting", computedAt: new Date().toISOString() },
+        { sessionId: "demo-s3", projectId: "demo-proj-acme", startedAt: new Date(Date.now() - 14400000).toISOString(), endedAt: new Date(Date.now() - 12600000).toISOString(), durationMs: 1800000, agentCount: 2, subagentCount: 1, toolCallCount: 28, successfulToolCalls: 26, failedToolCalls: 2, permissionRequests: 0, prompt: "Write unit tests for the user service", computedAt: new Date().toISOString() },
+      ]);
+      setToolSummaries([
+        { toolName: "Read", category: "read", totalCalls: 34, successCount: 34, failureCount: 0, retryCount: 0, avgDurationMs: 180, maxDurationMs: 450 },
+        { toolName: "Write", category: "write", totalCalls: 22, successCount: 20, failureCount: 2, retryCount: 2, avgDurationMs: 320, maxDurationMs: 890 },
+        { toolName: "Edit", category: "write", totalCalls: 18, successCount: 15, failureCount: 3, retryCount: 3, avgDurationMs: 280, maxDurationMs: 720 },
+        { toolName: "Bash", category: "shell", totalCalls: 15, successCount: 12, failureCount: 3, retryCount: 2, avgDurationMs: 2400, maxDurationMs: 8500 },
+        { toolName: "Grep", category: "read", totalCalls: 12, successCount: 12, failureCount: 0, retryCount: 0, avgDurationMs: 95, maxDurationMs: 210 },
+        { toolName: "Glob", category: "read", totalCalls: 8, successCount: 8, failureCount: 0, retryCount: 0, avgDurationMs: 60, maxDurationMs: 140 },
+        { toolName: "Agent", category: "delegate", totalCalls: 6, successCount: 6, failureCount: 0, retryCount: 0, avgDurationMs: 450, maxDurationMs: 900 },
+        { toolName: "WebFetch", category: "web", totalCalls: 3, successCount: 2, failureCount: 1, retryCount: 1, avgDurationMs: 1800, maxDurationMs: 3200 },
+      ]);
+      setPermissions([
+        { id: "perm-1", sessionId: "demo-s1", agentId: "tester-1", toolName: "Bash", commandPreview: "npm run deploy:staging", requestedAt: new Date(Date.now() - 3000000).toISOString(), decidedAt: new Date(Date.now() - 2995000).toISOString(), decision: "approved", waitingDurationMs: 5000, requestType: "permission" },
+        { id: "perm-2", sessionId: "demo-s1", agentId: "builder-1", toolName: "Bash", commandPreview: "rm -rf dist/", requestedAt: new Date(Date.now() - 2800000).toISOString(), decidedAt: new Date(Date.now() - 2790000).toISOString(), decision: "approved", waitingDurationMs: 10000, requestType: "permission" },
+        { id: "perm-3", sessionId: "demo-s2", agentId: "main", toolName: "Bash", commandPreview: "npm run migrate:prod", requestedAt: new Date(Date.now() - 6000000).toISOString(), decidedAt: new Date(Date.now() - 5985000).toISOString(), decision: "denied", waitingDurationMs: 15000, requestType: "permission" },
+      ]);
       setLoading(false);
       return;
     }
