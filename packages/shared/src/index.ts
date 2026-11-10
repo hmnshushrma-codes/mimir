@@ -10,3 +10,4 @@ export * from "./model.js";
 export * from "./serialize.js";
 export * from "./ws-protocol.js";
 export * from "./analytics.js";
+export * from "./analytics-builders.js";

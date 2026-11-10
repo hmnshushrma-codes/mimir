@@ -19,6 +19,9 @@ import {
   type MaybeAvailable,
   type DataAvailability,
 } from "./analytics.js";
+import { WorkshopModel } from "./model.js";
+import { MAIN_AGENT_ID } from "./workshop-event.js";
+import { buildSessionAnalytics, buildToolCallAnalytics, buildPermissionEvents, buildTimelineEvents, buildDashboardMetrics } from "./analytics-builders.js";
 
 describe("analytics types — compilation and constants", () => {
   it("EMPTY_TOKEN_USAGE has all fields unavailable", () => {
@@ -191,5 +194,145 @@ describe("analytics types — compilation and constants", () => {
       computedAt: "2026-01-01T00:00:00Z",
     };
     expect(m.totalSessions).toBe(10);
+  });
+});
+
+// ─── Integration tests: real model → analytics builders ─────────────
+
+describe("analytics builders — integration with WorkshopModel", () => {
+  const T = "2026-01-15T10:00:00.000Z";
+  function ts(offsetMs: number): string {
+    return new Date(Date.parse(T) + offsetMs).toISOString();
+  }
+
+  function buildTestSession(): WorkshopModel {
+    const model = new WorkshopModel();
+    // Session start
+    model.ingest({ session_id: "s1", hook_event_name: "SessionStart", source: "startup", cwd: "/project", timestamp: ts(0) });
+    // User prompt
+    model.ingest({ session_id: "s1", hook_event_name: "UserPromptSubmit", prompt: "Fix the auth bug", timestamp: ts(100) });
+    // Foreman reads a file
+    model.ingest({ session_id: "s1", hook_event_name: "PreToolUse", tool_name: "Read", tool_input: { file_path: "src/auth.ts" }, tool_use_id: "tu1", timestamp: ts(500) });
+    model.ingest({ session_id: "s1", hook_event_name: "PostToolUse", tool_name: "Read", tool_input: {}, tool_output: "...", tool_use_id: "tu1", timestamp: ts(800) });
+    // Foreman delegates
+    model.ingest({ session_id: "s1", hook_event_name: "PreToolUse", tool_name: "Agent", tool_input: { description: "Fix auth" }, tool_use_id: "tu-del", timestamp: ts(1000) });
+    model.ingest({ session_id: "s1", hook_event_name: "SubagentStart", agent_id: "agent-1", agent_type: "general-purpose", task_description: "Fix auth", timestamp: ts(1200) });
+    model.ingest({ session_id: "s1", hook_event_name: "PostToolUse", tool_name: "Agent", tool_input: {}, tool_output: "started", tool_use_id: "tu-del", timestamp: ts(1300) });
+    // Subagent does work — a failed call then a retry
+    model.ingest({ session_id: "s1", hook_event_name: "PreToolUse", tool_name: "Bash", tool_input: { command: "npm test" }, tool_use_id: "tu2", agent_id: "agent-1", agent_type: "general-purpose", timestamp: ts(2000) });
+    model.ingest({ session_id: "s1", hook_event_name: "PostToolUseFailure", tool_name: "Bash", tool_input: {}, error: "exit 1", tool_use_id: "tu2", agent_id: "agent-1", agent_type: "general-purpose", timestamp: ts(4000) });
+    // Retry same command
+    model.ingest({ session_id: "s1", hook_event_name: "PreToolUse", tool_name: "Bash", tool_input: { command: "npm test" }, tool_use_id: "tu3", agent_id: "agent-1", agent_type: "general-purpose", timestamp: ts(5000) });
+    model.ingest({ session_id: "s1", hook_event_name: "PostToolUse", tool_name: "Bash", tool_input: {}, tool_output: "ok", tool_use_id: "tu3", agent_id: "agent-1", agent_type: "general-purpose", timestamp: ts(7000) });
+    // Subagent finishes
+    model.ingest({ session_id: "s1", hook_event_name: "SubagentStop", agent_id: "agent-1", agent_type: "general-purpose", exit_reason: "completed", timestamp: ts(7500) });
+    // Session ends
+    model.ingest({ session_id: "s1", hook_event_name: "Stop", last_assistant_message: "Auth fixed", timestamp: ts(8000) });
+    return model;
+  }
+
+  it("buildSessionAnalytics produces correct counts from real events", () => {
+    const model = buildTestSession();
+    const session = model.getSession("s1")!;
+    const analytics = buildSessionAnalytics(session, "Fix the auth bug");
+
+    expect(analytics.sessionId).toBe("s1");
+    expect(analytics.prompt).toBe("Fix the auth bug");
+    expect(analytics.agentCount).toBe(2); // main + agent-1
+    expect(analytics.subagentCount).toBe(1); // agent-1
+    // Tool calls: tu1 (Read), tu-del (Agent), tu2 (Bash fail), tu3 (Bash ok) = 4
+    expect(analytics.toolCallCount).toBeGreaterThanOrEqual(3);
+    expect(analytics.failedToolCalls).toBeGreaterThanOrEqual(1);
+    expect(analytics.successfulToolCalls).toBeGreaterThanOrEqual(2);
+    // Token data is unavailable from hooks
+    expect(analytics.tokenUsage.inputTokens.availability).toBe("unavailable");
+    expect(analytics.cost).toBeNull();
+  });
+
+  it("buildToolCallAnalytics detects retries", () => {
+    const model = buildTestSession();
+    const session = model.getSession("s1")!;
+    const tools = buildToolCallAnalytics(session);
+
+    // Find the Bash calls
+    const bashCalls = tools.filter((t) => t.toolName === "Bash");
+    expect(bashCalls.length).toBeGreaterThanOrEqual(2);
+
+    const failed = bashCalls.find((t) => t.status === "failed");
+    const retried = bashCalls.find((t) => t.isRetry === true);
+    expect(failed).toBeDefined();
+    expect(retried).toBeDefined();
+    expect(failed!.isRetry).toBe(false); // First attempt is not a retry
+    expect(retried!.status).toBe("succeeded");
+  });
+
+  it("buildToolCallAnalytics computes durations", () => {
+    const model = buildTestSession();
+    const session = model.getSession("s1")!;
+    const tools = buildToolCallAnalytics(session);
+
+    const readCall = tools.find((t) => t.toolName === "Read");
+    expect(readCall).toBeDefined();
+    expect(readCall!.durationMs).toBe(300); // 800 - 500
+    expect(readCall!.category).toBe("read");
+  });
+
+  it("buildTimelineEvents produces a sorted timeline", () => {
+    const model = buildTestSession();
+    const session = model.getSession("s1")!;
+    const timeline = buildTimelineEvents(session);
+
+    expect(timeline.length).toBeGreaterThan(0);
+    // First event should be session_start
+    expect(timeline[0].type).toBe("session_start");
+    // Stop hook doesn't set session.status = "ended" (only SessionEnd does),
+    // so session_end event won't appear. Last should be agent_stop or a tool event.
+    expect(timeline[timeline.length - 1].type).not.toBe("session_start");
+    // Check sorted by timestamp
+    for (let i = 1; i < timeline.length; i++) {
+      expect(Date.parse(timeline[i].timestamp)).toBeGreaterThanOrEqual(Date.parse(timeline[i - 1].timestamp));
+    }
+    // Should have agent_spawn for agent-1
+    expect(timeline.some((e) => e.type === "agent_spawn")).toBe(true);
+    // Should have tool_failure
+    expect(timeline.some((e) => e.type === "tool_failure")).toBe(true);
+    // Should have agent_stop for agent-1
+    expect(timeline.some((e) => e.type === "agent_stop")).toBe(true);
+  });
+
+  it("buildPermissionEvents detects pending permissions", () => {
+    const model = new WorkshopModel();
+    model.ingest({ session_id: "s2", hook_event_name: "SessionStart", source: "startup", timestamp: T });
+    model.ingest({ session_id: "s2", hook_event_name: "UserPromptSubmit", prompt: "deploy", timestamp: ts(100) });
+    model.ingest({ session_id: "s2", hook_event_name: "PreToolUse", tool_name: "Bash", tool_input: { command: "rm -rf /tmp" }, tool_use_id: "tu-perm", timestamp: ts(500) });
+    model.ingest({ session_id: "s2", hook_event_name: "Notification", notification_type: "permission_prompt", message: "Allow delete?", timestamp: ts(600) });
+
+    const session = model.getSession("s2")!;
+    const perms = buildPermissionEvents(session);
+
+    expect(perms.length).toBe(1);
+    expect(perms[0].decision).toBe("pending");
+    expect(perms[0].requestType).toBe("permission");
+    expect(perms[0].agentId).toBe(MAIN_AGENT_ID);
+  });
+
+  it("buildDashboardMetrics aggregates across sessions", () => {
+    const model = buildTestSession();
+    // Add a second session
+    model.ingest({ session_id: "s2", hook_event_name: "SessionStart", source: "startup", timestamp: ts(10000) });
+    model.ingest({ session_id: "s2", hook_event_name: "UserPromptSubmit", prompt: "add tests", timestamp: ts(10100) });
+    model.ingest({ session_id: "s2", hook_event_name: "PreToolUse", tool_name: "Write", tool_input: { file_path: "test.ts" }, tool_use_id: "tu-s2", timestamp: ts(10500) });
+    model.ingest({ session_id: "s2", hook_event_name: "PostToolUse", tool_name: "Write", tool_input: {}, tool_output: "ok", tool_use_id: "tu-s2", timestamp: ts(11000) });
+    model.ingest({ session_id: "s2", hook_event_name: "Stop", last_assistant_message: "done", timestamp: ts(12000) });
+
+    const sessions = model.getSnapshot();
+    const dashboard = buildDashboardMetrics(sessions);
+
+    expect(dashboard.totalSessions).toBe(2);
+    expect(dashboard.totalAgents).toBeGreaterThanOrEqual(3); // 2 in s1 + 1 in s2
+    expect(dashboard.totalToolCalls).toBeGreaterThanOrEqual(4);
+    expect(dashboard.failedTasks).toBeGreaterThanOrEqual(1);
+    expect(dashboard.tokenUsage.inputTokens.availability).toBe("unavailable");
+    expect(dashboard.totalCost.availability).toBe("unavailable");
   });
 });
