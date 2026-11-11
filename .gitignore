@@ -8,6 +8,7 @@ dist/
 .env.local
 *.bak
 .claude/
+brag-output/
 
 # Prompt files (not part of the project)
 agent-workshop-prompt.md
