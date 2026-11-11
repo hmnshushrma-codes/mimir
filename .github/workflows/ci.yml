@@ -1,0 +1,41 @@
+name: CI
+
+# Runs on every PR and push to main. Never deploys anything — demo deploys
+# live in deploy-demo.yml, npm releases in release.yml.
+
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main]
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: "pnpm"
+
+      - run: pnpm install --frozen-lockfile
+
+      - run: pnpm build
+
+      - run: pnpm typecheck
+
+      - run: pnpm test
+
+      # Build the demo and verify it never references localhost — catches a
+      # broken demo in the PR, before it reaches main and gets deployed
+      - run: bash scripts/build-demo.sh

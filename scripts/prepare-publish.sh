@@ -11,23 +11,25 @@ COREPACK_ENABLE_STRICT=0 pnpm build
 echo "Bundling CLI..."
 mkdir -p publish/dist
 
-npx esbuild packages/cli/src/main.ts \
+# bin.ts is the entry; --splitting keeps main.ts (and its fastify/sqlite
+# imports) in a separate chunk so the Node version check runs first.
+npx esbuild packages/cli/src/bin.ts \
   --bundle \
+  --splitting \
   --platform=node \
   --target=node22 \
   --format=esm \
-  --outfile=publish/dist/mimir.mjs \
+  --outdir=publish/dist \
+  --entry-names=mimir \
+  --out-extension:.js=.mjs \
   --external:fastify \
   --external:@fastify/websocket \
   --external:@fastify/static \
   --external:zod
 
-# Ensure single shebang at top
-sed -i '1{/^#!\/usr\/bin\/env node$/!i\#!/usr/bin/env node
-}' publish/dist/mimir.mjs
-# Remove any duplicate shebangs
-awk 'NR==1{print;next} !/^#!\/usr\/bin\/env node$/' publish/dist/mimir.mjs > /tmp/mimir-clean.mjs
-mv /tmp/mimir-clean.mjs publish/dist/mimir.mjs
+# Ensure exactly one shebang at top (portable across GNU/BSD tools)
+{ echo '#!/usr/bin/env node'; grep -v '^#!/usr/bin/env node$' publish/dist/mimir.mjs; } > publish/dist/mimir.tmp
+mv publish/dist/mimir.tmp publish/dist/mimir.mjs
 chmod +x publish/dist/mimir.mjs
 
 # 3. Copy pre-built web app (static files served by the server)
@@ -52,7 +54,7 @@ cat > publish/package.json << 'EOF'
     "dist/"
   ],
   "engines": {
-    "node": ">=22.5.0"
+    "node": ">=22.13.0"
   },
   "keywords": [
     "claude", "claude-code", "agent", "visualization",

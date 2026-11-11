@@ -1,7 +1,9 @@
 import type { ActionCategory, HookEventEnvelope, ServerToClientMessage, WorkshopEvent } from "@agent-workshop/shared";
 import { useWorkshopStore } from "../store/useWorkshopStore.js";
 
-const DEFAULT_WS_URL = "ws://localhost:4000/ws";
+// Demo builds (VITE_DEMO=true) are public: they must never reach a visitor's
+// local collector, so the localhost default is compiled out of them entirely.
+const DEFAULT_WS_URL = import.meta.env.VITE_DEMO === "true" ? "" : "ws://localhost:4000/ws";
 const RECONNECT_DELAY_MS = 2000;
 
 function wsUrl(): string {

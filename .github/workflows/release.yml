@@ -40,7 +40,7 @@ jobs:
           body: |
             ## Install
 
-            **npm (requires Node >= 22.5):**
+            **npm (requires Node >= 22.13):**
             ```bash
             npx mimir-dev
             ```

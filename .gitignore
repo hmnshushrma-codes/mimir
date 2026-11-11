@@ -1,11 +1,13 @@
 node_modules/
 dist/
+dist-demo/
 *.log
 .DS_Store
 *.sqlite
 *.sqlite-journal
 .env
 .env.local
+.env.demo
 *.bak
 .claude/
 brag-output/

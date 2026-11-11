@@ -50,7 +50,7 @@ You (User) --> Foreman --> Workers (subagents)
 
 ## Quick start
 
-**Requires Node >= 22.5** (for built-in SQLite).
+**Requires Node >= 22.13** (for built-in SQLite).
 
 ```bash
 # Install from npm
@@ -60,12 +60,23 @@ npx mimir-dev            # Start the visualization
 # Or from source
 git clone https://github.com/hmnshushrma-codes/mimir.git
 cd mimir
-pnpm install && pnpm build
-pnpm start
+nvm use            # optional — picks Node 22 from .nvmrc
+pnpm bootstrap       # install, build, and link the `mimir` command globally
+mimir install      # Wire up Claude Code hooks (one-time)
+mimir start        # Start the visualization
 ```
+
+`pnpm bootstrap` symlinks the `mimir` command into npm's global bin directory.
+If you'd rather not link it, run `pnpm start` from the repo instead.
 
 Open `http://localhost:4000` in your browser. Start a Claude Code session
 and watch the agents appear.
+
+Want a friendlier URL? Map `mimir.local` once and Mimir will use it automatically:
+
+```bash
+echo "127.0.0.1 mimir.local" | sudo tee -a /etc/hosts
+```
 
 ## Demo mode
 
@@ -132,6 +143,21 @@ pnpm test         # 418 tests across all packages
 pnpm typecheck
 pnpm lint
 ```
+
+## Deploying the demo
+
+The public demo is a static `VITE_DEMO=true` build on Cloudflare Pages.
+
+```bash
+cp .env.demo.example .env.demo   # fill in CLOUDFLARE_API_TOKEN + CLOUDFLARE_ACCOUNT_ID
+pnpm demo:build                  # build + check (scripts/build-demo.sh)
+pnpm demo:preview                # build + serve locally on :4173
+pnpm demo:deploy                 # build + check + deploy (scripts/deploy-demo.sh)
+```
+
+CI runs the same scripts: `ci.yml` checks every PR (no deploy), and
+`deploy-demo.yml` deploys when `main` changes or when run by hand from the
+Actions tab, with the Cloudflare values coming from repository secrets.
 
 ## Tech stack
 
