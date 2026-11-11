@@ -107,6 +107,17 @@ body {
   margin-right: 12px;
 }
 
+.docs-link {
+  color: var(--text-muted);
+  font-size: 13px;
+  margin-right: 12px;
+  text-decoration: none;
+}
+
+.docs-link:hover {
+  color: var(--accent);
+}
+
 .clear-history-btn {
   background: transparent;
   border: 1px solid var(--border);

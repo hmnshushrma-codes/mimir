@@ -1,11 +1,11 @@
 # Mimir
 
-**[Live Demo](https://mimir-demo.ninoforge.com)** — try it in your browser, no install needed
+**[Live Demo](https://mimir-demo.ninoforge.com)** — try it in your browser, no install needed ·
+**[Docs](https://mimir-demo.ninoforge.com/docs)**
 
 > The demo is fully simulated — no real sessions, API keys, or backend required.
 
-<!-- TODO: Replace with actual GIF once recorded -->
-<!-- ![Mimir Demo](docs/demo.gif) -->
+![The Mimir workshop: the Foreman delegating to subagents at their desks](packages/web/public/screenshots/workshop.png)
 
 Watch your AI coding agents work in real time. Mimir visualizes Claude Code
 sessions as animated characters sitting at desks — you see every tool call,
@@ -20,6 +20,9 @@ delegation, permission request, error, and celebration as it happens.
 - States: typing, reading, thinking, error (scratch head), permission (raise hand), sleeping (eyes closed + Zzz), celebrate (thumbs up + sparkles)
 
 ### Intelligence Layer
+
+![Analytics overview: sessions, agents, tool calls, failures, permissions, total time](packages/web/public/screenshots/analytics.png)
+
 - **Session Analytics** — agents, tool calls, failures, duration per session
 - **Tool Execution Analytics** — most used tools, success/failure rates, avg duration, retries
 - **Agent Performance** — per-session agent metrics
@@ -153,7 +156,11 @@ cp .env.demo.example .env.demo   # fill in CLOUDFLARE_API_TOKEN + CLOUDFLARE_ACC
 pnpm demo:build                  # build + check (scripts/build-demo.sh)
 pnpm demo:preview                # build + serve locally on :4173
 pnpm demo:deploy                 # build + check + deploy (scripts/deploy-demo.sh)
+pnpm demo:images                 # regenerate README/docs screenshots + og-image.png (after demo:build)
 ```
+
+`demo:images` drives your installed Google Chrome through the demo, so rerun
+it whenever the UI changes and commit the updated PNGs.
 
 CI runs the same scripts: `ci.yml` checks every PR (no deploy), and
 `deploy-demo.yml` deploys when `main` changes or when run by hand from the
