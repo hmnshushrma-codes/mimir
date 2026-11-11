@@ -7,8 +7,9 @@
 # the repo root (gitignored; copy .env.demo.example). In CI they come from
 # repository secrets. Variables already set in the environment win over the file.
 #
-#   CLOUDFLARE_API_TOKEN    required — Pages:Edit token
-#   CLOUDFLARE_ACCOUNT_ID   required
+#   CLOUDFLARE_API_TOKEN    Pages:Edit token — or, locally, skip it and use
+#                           your `npx wrangler login` session instead
+#   CLOUDFLARE_ACCOUNT_ID   required with a token
 #   DEMO_PROJECT_NAME       optional — Pages project (default: mimir-demo)
 #   DEMO_BRANCH             optional — Pages branch (default: main = production)
 #   VITE_*                  optional — extra build-time vars for the demo bundle
@@ -31,12 +32,21 @@ if [ -f "$ENV_FILE" ]; then
   done < "$ENV_FILE"
 fi
 
-missing=()
-[ -n "${CLOUDFLARE_API_TOKEN:-}" ] || missing+=(CLOUDFLARE_API_TOKEN)
-[ -n "${CLOUDFLARE_ACCOUNT_ID:-}" ] || missing+=(CLOUDFLARE_ACCOUNT_ID)
-if [ ${#missing[@]} -gt 0 ]; then
-  echo "✗ Missing: ${missing[*]}" >&2
-  echo "  Set them in $ENV_FILE (see .env.demo.example) or export them." >&2
+WRANGLER="npx --yes wrangler@4"
+
+if [ -n "${CLOUDFLARE_API_TOKEN:-}" ]; then
+  if [ -z "${CLOUDFLARE_ACCOUNT_ID:-}" ]; then
+    echo "✗ CLOUDFLARE_API_TOKEN is set but CLOUDFLARE_ACCOUNT_ID is missing" >&2
+    echo "  Set it in $ENV_FILE (see .env.demo.example) or export it." >&2
+    exit 1
+  fi
+  echo "Auth: CLOUDFLARE_API_TOKEN"
+elif $WRANGLER whoami >/dev/null 2>&1; then
+  echo "Auth: wrangler login session"
+else
+  echo "✗ No Cloudflare credentials." >&2
+  echo "  Either run \`npx wrangler login\`, or set CLOUDFLARE_API_TOKEN + CLOUDFLARE_ACCOUNT_ID" >&2
+  echo "  in $ENV_FILE (see .env.demo.example)." >&2
   exit 1
 fi
 
@@ -47,7 +57,7 @@ bash scripts/build-demo.sh
 
 echo ""
 echo "=== Deploying to Cloudflare Pages ($PROJECT_NAME, branch: $BRANCH) ==="
-npx --yes wrangler@4 pages deploy packages/web/dist-demo \
+$WRANGLER pages deploy packages/web/dist-demo \
   --project-name="$PROJECT_NAME" \
   --branch="$BRANCH" \
   --commit-dirty=true
