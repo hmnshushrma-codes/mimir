@@ -1,11 +1,11 @@
 # Mimir
 
-**[Live Demo](https://mimir-demo.ninoforge.com)** — try it in your browser, no install needed
+**[Live Demo](https://mimir-demo.ninoforge.com)** — try it in your browser, no install needed ·
+**[Docs](https://mimir-demo.ninoforge.com/docs)**
 
 > The demo is fully simulated — no real sessions, API keys, or backend required.
 
-<!-- TODO: Replace with actual GIF once recorded -->
-<!-- ![Mimir Demo](docs/demo.gif) -->
+![The Mimir workshop: the Foreman delegating to subagents at their desks](packages/web/public/screenshots/workshop.png)
 
 Watch your AI coding agents work in real time. Mimir visualizes Claude Code
 sessions as animated characters sitting at desks — you see every tool call,
@@ -20,6 +20,9 @@ delegation, permission request, error, and celebration as it happens.
 - States: typing, reading, thinking, error (scratch head), permission (raise hand), sleeping (eyes closed + Zzz), celebrate (thumbs up + sparkles)
 
 ### Intelligence Layer
+
+![Analytics overview: sessions, agents, tool calls, failures, permissions, total time](packages/web/public/screenshots/analytics.png)
+
 - **Session Analytics** — agents, tool calls, failures, duration per session
 - **Tool Execution Analytics** — most used tools, success/failure rates, avg duration, retries
 - **Agent Performance** — per-session agent metrics
@@ -50,7 +53,7 @@ You (User) --> Foreman --> Workers (subagents)
 
 ## Quick start
 
-**Requires Node >= 22.5** (for built-in SQLite).
+**Requires Node >= 22.13** (for built-in SQLite).
 
 ```bash
 # Install from npm
@@ -60,12 +63,23 @@ npx mimir-dev            # Start the visualization
 # Or from source
 git clone https://github.com/hmnshushrma-codes/mimir.git
 cd mimir
-pnpm install && pnpm build
-pnpm start
+nvm use            # optional — picks Node 22 from .nvmrc
+pnpm bootstrap       # install, build, and link the `mimir` command globally
+mimir install      # Wire up Claude Code hooks (one-time)
+mimir start        # Start the visualization
 ```
+
+`pnpm bootstrap` symlinks the `mimir` command into npm's global bin directory.
+If you'd rather not link it, run `pnpm start` from the repo instead.
 
 Open `http://localhost:4000` in your browser. Start a Claude Code session
 and watch the agents appear.
+
+Want a friendlier URL? Map `mimir.local` once and Mimir will use it automatically:
+
+```bash
+echo "127.0.0.1 mimir.local" | sudo tee -a /etc/hosts
+```
 
 ## Demo mode
 
@@ -132,6 +146,25 @@ pnpm test         # 418 tests across all packages
 pnpm typecheck
 pnpm lint
 ```
+
+## Deploying the demo
+
+The public demo is a static `VITE_DEMO=true` build on Cloudflare Pages.
+
+```bash
+cp .env.demo.example .env.demo   # fill in CLOUDFLARE_API_TOKEN + CLOUDFLARE_ACCOUNT_ID
+pnpm demo:build                  # build + check (scripts/build-demo.sh)
+pnpm demo:preview                # build + serve locally on :4173
+pnpm demo:deploy                 # build + check + deploy (scripts/deploy-demo.sh)
+pnpm demo:images                 # regenerate README/docs screenshots + og-image.png (after demo:build)
+```
+
+`demo:images` drives your installed Google Chrome through the demo, so rerun
+it whenever the UI changes and commit the updated PNGs.
+
+CI runs the same scripts: `ci.yml` checks every PR (no deploy), and
+`deploy-demo.yml` deploys when `main` changes or when run by hand from the
+Actions tab, with the Cloudflare values coming from repository secrets.
 
 ## Tech stack
 

@@ -4,16 +4,21 @@
   "version": "0.1.0",
   "packageManager": "pnpm@12.15.0",
   "engines": {
-    "node": ">=22.5.0"
+    "node": ">=22.13.0"
   },
   "scripts": {
     "predev": "pnpm --filter @agent-workshop/shared run build",
     "dev": "pnpm --parallel --filter ./packages/server --filter ./packages/web run dev",
     "predemo": "pnpm --filter @agent-workshop/shared run build",
     "demo": "pnpm --filter ./packages/web run demo",
+    "demo:build": "bash scripts/build-demo.sh",
+    "demo:preview": "bash scripts/build-demo.sh --preview",
+    "demo:deploy": "bash scripts/deploy-demo.sh",
+    "demo:images": "node scripts/capture-images.mjs",
     "build": "pnpm -r run build",
-    "start": "node packages/cli/dist/main.js",
-    "start:demo": "node packages/cli/dist/main.js demo",
+    "bootstrap": "pnpm install && pnpm build && node scripts/link-cli.mjs",
+    "start": "node packages/cli/dist/bin.js",
+    "start:demo": "node packages/cli/dist/bin.js demo",
     "pretest": "pnpm --filter @agent-workshop/shared run build",
     "test": "pnpm -r run test",
     "lint": "pnpm -r run lint",
@@ -24,6 +29,7 @@
     "@eslint/js": "^9.14.0",
     "esbuild": "^0.28.2",
     "eslint": "^9.14.0",
+    "playwright-core": "^1.65.0",
     "typescript": "^5.6.3",
     "typescript-eslint": "^8.13.0"
   }

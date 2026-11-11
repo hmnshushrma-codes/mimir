@@ -1,10 +1,25 @@
 name: Deploy Demo to Cloudflare Pages
 
+# Deploys the public demo (mimir-demo.ninoforge.com) only when main changes
+# something the demo is built from, or when triggered by hand from the
+# Actions tab. PRs are checked by ci.yml and never deploy.
+
 on:
   push:
     branches: [main]
-  pull_request:
-    branches: [main]
+    paths:
+      - "packages/web/**"
+      - "packages/shared/**"
+      - "scripts/build-demo.sh"
+      - "scripts/deploy-demo.sh"
+      - "pnpm-lock.yaml"
+      - ".github/workflows/deploy-demo.yml"
+  workflow_dispatch:
+
+# Never run two deploys at once; a newer push replaces a queued one
+concurrency:
+  group: deploy-demo
+  cancel-in-progress: false
 
 jobs:
   deploy:
@@ -26,17 +41,11 @@ jobs:
         env:
           PNPM_IGNORE_BUILDS: "true"
 
-      # Build the shared package first (web depends on it)
-      - run: pnpm --filter @agent-workshop/shared run build
-
-      # Build the web package with VITE_DEMO=true — static output, no backend
-      - run: pnpm --filter @agent-workshop/web run build
+      # Same script as local `pnpm demo:deploy` — secrets arrive as env vars
+      # instead of .env.demo
+      - run: bash scripts/deploy-demo.sh
         env:
-          VITE_DEMO: "true"
-
-      - name: Deploy to Cloudflare Pages
-        uses: cloudflare/wrangler-action@v3
-        with:
-          apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
-          accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
-          command: pages deploy packages/web/dist --project-name=mimir-demo --branch=${{ github.head_ref || 'main' }}
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          DEMO_PROJECT_NAME: mimir-demo
+          DEMO_BRANCH: main

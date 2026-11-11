@@ -77,6 +77,9 @@ export function App() {
           </button>
         </nav>
         <span className="spacer" />
+        <a className="docs-link" href="/docs.html" target="_blank" rel="noopener">
+          Docs
+        </a>
         {!isDemoMode() && (
           <>
             <label className="debug-overlay-toggle">

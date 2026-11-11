@@ -4,7 +4,7 @@
   "description": "Mimir — the all-knowing oracle for Claude Code sessions. Live animated visualization of agents, subagents, and tool calls.",
   "type": "module",
   "bin": {
-    "mimir": "./dist/main.js"
+    "mimir": "./dist/bin.js"
   },
   "scripts": {
     "build": "tsc -p tsconfig.json",
@@ -21,7 +21,7 @@
     "typescript": "^5.6.3"
   },
   "engines": {
-    "node": ">=22.5.0"
+    "node": ">=22.13.0"
   },
   "keywords": ["claude", "claude-code", "agent", "visualization", "hooks", "developer-tools"],
   "license": "MIT"

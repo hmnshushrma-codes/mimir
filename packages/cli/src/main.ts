@@ -1,5 +1,3 @@
-#!/usr/bin/env node
-
 /**
  * mimir — Live animated visualization of Claude Code sessions.
  *
@@ -18,6 +16,7 @@
 import { resolve, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
 import { existsSync, readFileSync, writeFileSync, copyFileSync, mkdirSync, rmSync, readdirSync } from "node:fs";
+import { lookup } from "node:dns/promises";
 import { loadConfig } from "@agent-workshop/server/config";
 import { openDb } from "@agent-workshop/server/db";
 import { buildApp } from "@agent-workshop/server/server";
@@ -72,6 +71,29 @@ function hookScriptSource(): string {
     if (existsSync(p)) return p;
   }
   throw new Error("Could not find hook-runner.js — run `pnpm build` first");
+}
+
+// ─── Display host ────────────────────────────────────────────────────
+
+const FRIENDLY_HOST = "mimir.local";
+
+/**
+ * `mimir.local` only works if the user mapped it (e.g. `127.0.0.1 mimir.local`
+ * in /etc/hosts) — `.local` names otherwise go to mDNS and fail on a fresh
+ * machine. Use it only when it resolves to loopback; fall back to localhost.
+ */
+async function resolveDisplayHost(bindHost: string): Promise<string> {
+  if (bindHost !== "0.0.0.0" && bindHost !== "127.0.0.1") return bindHost;
+  try {
+    const result = await Promise.race([
+      lookup(FRIENDLY_HOST),
+      new Promise<never>((_, reject) => setTimeout(() => reject(new Error("timeout")), 500))
+    ]);
+    if (result.address.startsWith("127.") || result.address === "::1") return FRIENDLY_HOST;
+  } catch {
+    // Not resolvable — fall through
+  }
+  return "localhost";
 }
 
 // ─── Commands ────────────────────────────────────────────────────────
@@ -165,7 +187,7 @@ async function cmdStart(demo: boolean): Promise<void> {
   const db = openDb(config.dbPath);
   const app = buildApp({ config, db });
 
-  const displayHost = config.host === "0.0.0.0" || config.host === "127.0.0.1" ? "mimir.local" : config.host;
+  const displayHost = await resolveDisplayHost(config.host);
   const url = `http://${displayHost}:${config.port}`;
   const fullUrl = demo ? `${url}/?demo=1` : url;
 
@@ -178,7 +200,7 @@ async function cmdStart(demo: boolean): Promise<void> {
   │                                          │
   │   ${fullUrl.padEnd(38)} │
   │                                          │
-  │   ${demo ? "Demo mode — no hooks needed" : "Install hooks:  mimir install"}${demo ? " " : ""}  │
+  │   ${(demo ? "Demo mode — no hooks needed" : "Install hooks:  mimir install").padEnd(38)} │
   │   Stop:           Ctrl+C                 │
   │                                          │
   └──────────────────────────────────────────┘
@@ -225,7 +247,7 @@ Quick start:
   2. mimir              Start the visualization server
   3. Open a Claude Code session  Watch it appear live in your browser
 
-Requires Node >= 22.5 (for built-in SQLite module).
+Requires Node >= 22.13 (for built-in SQLite module).
 `);
 }
 
