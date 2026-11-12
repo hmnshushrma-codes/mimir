@@ -595,6 +595,8 @@ body {
   flex-direction: column;
   align-items: flex-start;
   gap: 4px;
+  min-width: 0;
+  overflow: hidden;
 }
 
 .project-sign {
@@ -604,9 +606,10 @@ body {
 
 .project-desks {
   display: flex;
-  flex-wrap: nowrap;
+  flex-wrap: wrap;
   gap: 16px;
   align-items: flex-start;
+  overflow: hidden;
 }
 
 .project-user-desk {
