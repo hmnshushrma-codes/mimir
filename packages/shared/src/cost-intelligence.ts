@@ -9,21 +9,39 @@
 import type { TokenUsage, ModelPricing, CostBreakdown, MaybeAvailable } from "./analytics.js";
 
 // ─── Default pricing table (Anthropic Claude models) ────────────────
-// Source: https://docs.anthropic.com/en/docs/about-claude/models
+// Source: https://platform.claude.com/docs/en/about-claude/pricing
+// Last verified: 2026-11-12
 // Prices per million tokens, USD.
+// Label: "API-equivalent estimate" — Claude Code uses Pro/Max plans,
+// actual cost may differ from API pricing.
+
+export const PRICING_LAST_VERIFIED = "2026-11-12";
 
 export const DEFAULT_MODEL_PRICING: ModelPricing[] = [
+  // ── Opus family ──
   {
     provider: "anthropic",
     model: "claude-opus-4-6",
-    inputPricePerMToken: 15.0,
-    outputPricePerMToken: 75.0,
-    cacheCreationPricePerMToken: 18.75,
-    cacheReadPricePerMToken: 1.50,
+    inputPricePerMToken: 5.0,
+    outputPricePerMToken: 25.0,
+    cacheCreationPricePerMToken: 6.25,  // 5m cache write
+    cacheReadPricePerMToken: 0.50,      // cache hit
     currency: "USD",
     effectiveDate: "2025-05-22",
-    source: "docs.anthropic.com/en/docs/about-claude/models",
+    source: "platform.claude.com/docs/en/about-claude/pricing",
   },
+  {
+    provider: "anthropic",
+    model: "claude-opus-5-5",
+    inputPricePerMToken: 4.0,
+    outputPricePerMToken: 20.0,
+    cacheCreationPricePerMToken: 5.0,
+    cacheReadPricePerMToken: 0.20,
+    currency: "USD",
+    effectiveDate: "2026-09-22",
+    source: "platform.claude.com/docs/en/about-claude/pricing",
+  },
+  // ── Sonnet family ──
   {
     provider: "anthropic",
     model: "claude-sonnet-4-6",
@@ -33,18 +51,41 @@ export const DEFAULT_MODEL_PRICING: ModelPricing[] = [
     cacheReadPricePerMToken: 0.30,
     currency: "USD",
     effectiveDate: "2025-05-22",
-    source: "docs.anthropic.com/en/docs/about-claude/models",
+    source: "platform.claude.com/docs/en/about-claude/pricing",
   },
   {
     provider: "anthropic",
-    model: "claude-haiku-4-5",
-    inputPricePerMToken: 0.80,
-    outputPricePerMToken: 4.0,
-    cacheCreationPricePerMToken: 1.0,
-    cacheReadPricePerMToken: 0.08,
+    model: "claude-sonnet-5-5",
+    inputPricePerMToken: 2.0,
+    outputPricePerMToken: 10.0,
+    cacheCreationPricePerMToken: 2.50,
+    cacheReadPricePerMToken: 0.10,
     currency: "USD",
-    effectiveDate: "2025-05-22",
-    source: "docs.anthropic.com/en/docs/about-claude/models",
+    effectiveDate: "2026-09-28",
+    source: "platform.claude.com/docs/en/about-claude/pricing",
+  },
+  // ── Haiku family ──
+  {
+    provider: "anthropic",
+    model: "claude-haiku-4-5",
+    inputPricePerMToken: 1.0,
+    outputPricePerMToken: 5.0,
+    cacheCreationPricePerMToken: 1.25,
+    cacheReadPricePerMToken: 0.10,
+    currency: "USD",
+    effectiveDate: "2025-10-01",
+    source: "platform.claude.com/docs/en/about-claude/pricing",
+  },
+  {
+    provider: "anthropic",
+    model: "claude-haiku-5-5",
+    inputPricePerMToken: 0.50,     // >100K prompt tier
+    outputPricePerMToken: 2.50,
+    cacheCreationPricePerMToken: 0.625,
+    cacheReadPricePerMToken: 0.05,
+    currency: "USD",
+    effectiveDate: "2026-10-07",
+    source: "platform.claude.com/docs/en/about-claude/pricing",
   },
 ];
 
