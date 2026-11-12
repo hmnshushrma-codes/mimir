@@ -2089,3 +2089,8 @@ body {
 .perm-queue-tool { font-weight: 600; }
 .perm-queue-detail { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--text-muted); font-family: monospace; font-size: 10px; }
 .perm-queue-time { color: var(--warn); font-size: 10px; white-space: nowrap; }
+
+/* Clickable mascot YES/NO signs */
+.sign-clickable { transition: transform 0.1s; }
+.sign-clickable:hover { transform: scale(1.15); filter: brightness(1.2); }
+.sign-clickable:active { transform: scale(0.95); }

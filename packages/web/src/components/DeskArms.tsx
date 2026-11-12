@@ -25,6 +25,10 @@ interface DeskArmsProps {
   armWidth?: number;
   handRadius?: number;
   scale?: number;
+  /** Callback when YES sign is clicked (allow permission). */
+  onSignYes?: () => void;
+  /** Callback when NO sign is clicked (deny permission). */
+  onSignNo?: () => void;
 }
 
 const TARGETS_L: Record<ArmPose, ArmTarget> = {
@@ -91,14 +95,19 @@ function SmoothArm({
 
 /** YES/NO sign rendered at an absolute SVG position — NOT a child
  *  of the arm chain, so no compounding transform issues. */
-function Sign({ x, y, label, color }: { x: number; y: number; label: string; color: string }) {
+function Sign({ x, y, label, color, onClick }: { x: number; y: number; label: string; color: string; onClick?: () => void }) {
   return (
     <motion.g
       animate={{ x, y }}
       transition={{ duration: 0.3, ease: "easeOut" }}
+      onClick={onClick}
+      style={{ cursor: onClick ? "pointer" : "default" }}
     >
       <rect x={-13} y={-8} width="26" height="16" rx="3" fill={color} stroke="#fff" strokeWidth="1" />
-      <text x={0} y={4} textAnchor="middle" fontSize="9" fontWeight="700" fill="#fff">{label}</text>
+      {onClick && (
+        <rect x={-13} y={-8} width="26" height="16" rx="3" fill="transparent" className="sign-hover-target" />
+      )}
+      <text x={0} y={4} textAnchor="middle" fontSize="9" fontWeight="700" fill="#fff" style={{ pointerEvents: "none" }}>{label}</text>
     </motion.g>
   );
 }
@@ -106,7 +115,8 @@ function Sign({ x, y, label, color }: { x: number; y: number; label: string; col
 export function DeskArms({
   cx, shoulderY, shoulderSpread,
   behaviour, teamColor, reducedMotion,
-  armWidth = 10, handRadius = 6, scale = 1
+  armWidth = 10, handRadius = 6, scale = 1,
+  onSignYes, onSignNo,
 }: DeskArmsProps) {
   const pose = deriveArmPose(behaviour);
   const typing = behaviour.activityLoop === "typing";
@@ -150,8 +160,8 @@ export function DeskArms({
         reducedMotion={reducedMotion}
       />
       {/* Signs rendered as siblings, not arm children — absolute positions */}
-      {showYes && <Sign x={signLx} y={signLy} label="YES" color="#1baf7a" />}
-      {showNo && <Sign x={signRx} y={signRy} label="NO" color="#e34948" />}
+      {showYes && <Sign x={signLx} y={signLy} label="YES" color="#1baf7a" onClick={onSignYes} />}
+      {showNo && <Sign x={signRx} y={signRy} label="NO" color="#e34948" onClick={onSignNo} />}
     </g>
   );
 }
