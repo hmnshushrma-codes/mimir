@@ -20,7 +20,7 @@ import { isDemoMode } from "../data/demoSource.js";
 
 const API = window.location.origin;
 
-type SubTab = "overview" | "tools" | "agents" | "timeline" | "compare" | "permissions" | "prompts";
+type SubTab = "overview" | "tokens" | "tools" | "agents" | "timeline" | "compare" | "permissions" | "prompts";
 
 interface StoredSessionAnalytics {
   sessionId: string;
@@ -275,6 +275,121 @@ function PromptsPanel({ sessions }: { sessions: StoredSessionAnalytics[] }) {
   );
 }
 
+// ─── Tokens ─────────────────────────────────────────────────────────
+
+function formatTokens(n: number): string {
+  if (n >= 1_000_000) return `${(n / 1_000_000).toFixed(1)}M`;
+  if (n >= 1_000) return `${(n / 1_000).toFixed(1)}K`;
+  return String(n);
+}
+
+function TokensPanel({ data }: { data: any[] }) {
+  if (data.length === 0) {
+    return <p className="analytics-empty">No token data yet — token data is read from Claude Code transcript files after tool calls complete</p>;
+  }
+
+  // Aggregate across sessions
+  const totals = data.reduce((acc, s) => ({
+    apiCalls: acc.apiCalls + (s.apiCalls ?? 0),
+    input: acc.input + (s.inputTokens ?? 0),
+    output: acc.output + (s.outputTokens ?? 0),
+    cacheWrite: acc.cacheWrite + (s.cacheCreationTokens ?? 0),
+    cacheRead: acc.cacheRead + (s.cacheReadTokens ?? 0),
+    turnDuration: acc.turnDuration + (s.totalTurnDurationMs ?? 0),
+    turns: acc.turns + (s.turnCount ?? 0),
+  }), { apiCalls: 0, input: 0, output: 0, cacheWrite: 0, cacheRead: 0, turnDuration: 0, turns: 0 });
+
+  // Estimate cost using the pricing from the shared package
+  const registry = new PricingRegistry();
+  const model = data[0]?.model ?? "claude-opus-4-6";
+  const pricing = registry.get(model);
+  let estCost = 0;
+  if (pricing) {
+    estCost = (totals.input / 1e6) * pricing.inputPricePerMToken
+      + (totals.output / 1e6) * pricing.outputPricePerMToken
+      + (totals.cacheWrite / 1e6) * pricing.cacheCreationPricePerMToken
+      + (totals.cacheRead / 1e6) * pricing.cacheReadPricePerMToken;
+  }
+
+  // Context: latest session's context usage
+  const latest = data[0];
+  const ctxTokens = latest?.latestContextTokens ?? 0;
+  const ctxLimit = 1_000_000; // default for Claude Code
+  const ctxPercent = ctxLimit > 0 ? Math.round((ctxTokens / ctxLimit) * 100) : 0;
+
+  return (
+    <div className="analytics-grid">
+      <div className="analytics-card">
+        <div className="analytics-card-value">{formatTokens(totals.input)}</div>
+        <div className="analytics-card-label">Input Tokens</div>
+      </div>
+      <div className="analytics-card">
+        <div className="analytics-card-value">{formatTokens(totals.output)}</div>
+        <div className="analytics-card-label">Output Tokens</div>
+      </div>
+      <div className="analytics-card">
+        <div className="analytics-card-value">{formatTokens(totals.cacheWrite)}</div>
+        <div className="analytics-card-label">Cache Write</div>
+      </div>
+      <div className="analytics-card">
+        <div className="analytics-card-value">{formatTokens(totals.cacheRead)}</div>
+        <div className="analytics-card-label">Cache Read</div>
+      </div>
+      <div className="analytics-card">
+        <div className="analytics-card-value" title="API-equivalent estimate — actual cost on Pro/Max plans may differ">
+          ${estCost < 1 ? estCost.toFixed(3) : estCost.toFixed(2)}
+        </div>
+        <div className="analytics-card-label">Est. Cost (API equiv.)</div>
+      </div>
+      <div className="analytics-card">
+        <div className="analytics-card-value" style={{ color: ctxPercent > 80 ? "var(--warn)" : ctxPercent > 95 ? "var(--error)" : undefined }}>
+          {ctxPercent}%
+        </div>
+        <div className="analytics-card-label">Context Window</div>
+      </div>
+
+      <div className="analytics-section">
+        <h3>Per Session</h3>
+        <table className="analytics-table">
+          <thead>
+            <tr><th>Session</th><th>Model</th><th>API Calls</th><th>Input</th><th>Output</th><th>Cache Write</th><th>Cache Read</th><th>Context</th><th>Turns</th></tr>
+          </thead>
+          <tbody>
+            {data.map((s: any) => {
+              const sCtx = s.latestContextTokens ?? 0;
+              const sCtxPct = ctxLimit > 0 ? Math.round((sCtx / ctxLimit) * 100) : 0;
+              return (
+                <tr key={s.sessionId}>
+                  <td title={s.sessionId}>{s.sessionId.slice(0, 8)}…</td>
+                  <td>{s.model ?? "—"}</td>
+                  <td>{s.apiCalls?.toLocaleString()}</td>
+                  <td>{formatTokens(s.inputTokens ?? 0)}</td>
+                  <td>{formatTokens(s.outputTokens ?? 0)}</td>
+                  <td>{formatTokens(s.cacheCreationTokens ?? 0)}</td>
+                  <td>{formatTokens(s.cacheReadTokens ?? 0)}</td>
+                  <td style={{ color: sCtxPct > 80 ? "var(--warn)" : undefined }}>{sCtxPct}%</td>
+                  <td>{s.turnCount ?? 0}</td>
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
+      </div>
+
+      {/* Context re-read cost insight */}
+      {totals.cacheRead > 100_000_000 && (
+        <div className="analytics-section" style={{ background: "var(--surface-alt)", padding: 12, borderRadius: 8 }}>
+          <strong style={{ color: "var(--warn)" }}>High context re-read cost</strong>
+          <p style={{ fontSize: 12, margin: "6px 0 0", color: "var(--text-muted)" }}>
+            {formatTokens(totals.cacheRead)} cache read tokens ({totals.cacheRead > 0 && pricing ? `$${((totals.cacheRead / 1e6) * pricing.cacheReadPricePerMToken).toFixed(2)}` : "—"}).
+            Consider using <code>/clear</code> or <code>/compact</code> when context stays above 80% for many turns.
+          </p>
+        </div>
+      )}
+    </div>
+  );
+}
+
 // ─── Agents ─────────────────────────────────────────────────────────
 
 interface StoredToolCallAnalytics {
@@ -498,6 +613,7 @@ export function AnalyticsView() {
   const [sessions, setSessions] = useState<StoredSessionAnalytics[]>([]);
   const [toolSummaries, setToolSummaries] = useState<ToolSummaryRow[]>([]);
   const [permissions, setPermissions] = useState<StoredPermissionEvent[]>([]);
+  const [tokenData, setTokenData] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -523,21 +639,27 @@ export function AnalyticsView() {
         { id: "perm-2", sessionId: "demo-s1", agentId: "builder-1", toolName: "Bash", commandPreview: "rm -rf dist/", requestedAt: new Date(Date.now() - 2800000).toISOString(), decidedAt: new Date(Date.now() - 2790000).toISOString(), decision: "approved", waitingDurationMs: 10000, requestType: "permission" },
         { id: "perm-3", sessionId: "demo-s2", agentId: "main", toolName: "Bash", commandPreview: "npm run migrate:prod", requestedAt: new Date(Date.now() - 6000000).toISOString(), decidedAt: new Date(Date.now() - 5985000).toISOString(), decision: "denied", waitingDurationMs: 15000, requestType: "permission" },
       ]);
+      setTokenData([
+        { sessionId: "demo-s1", model: "claude-opus-4-6", apiCalls: 245, inputTokens: 890, outputTokens: 85200, cacheCreationTokens: 1250000, cacheReadTokens: 142000000, latestContextTokens: 620000, totalTurnDurationMs: 3600000, turnCount: 28 },
+        { sessionId: "demo-s2", model: "claude-sonnet-4-6", apiCalls: 180, inputTokens: 650, outputTokens: 42000, cacheCreationTokens: 890000, cacheReadTokens: 95000000, latestContextTokens: 380000, totalTurnDurationMs: 2400000, turnCount: 22 },
+      ]);
       setLoading(false);
       return;
     }
     let cancelled = false;
     async function load() {
       try {
-        const [sessRes, toolRes, permRes] = await Promise.all([
+        const [sessRes, toolRes, permRes, tokRes] = await Promise.all([
           fetch(`${API}/analytics/sessions`),
           fetch(`${API}/analytics/tools/summary`),
           fetch(`${API}/analytics/permissions`),
+          fetch(`${API}/analytics/tokens`),
         ]);
         if (cancelled) return;
         if (sessRes.ok) setSessions(await sessRes.json());
         if (toolRes.ok) setToolSummaries(await toolRes.json());
         if (permRes.ok) setPermissions(await permRes.json());
+        if (tokRes.ok) setTokenData(await tokRes.json());
       } catch { /* offline */ }
       setLoading(false);
     }
@@ -559,6 +681,7 @@ export function AnalyticsView() {
       </nav>
       <div className="analytics-content">
         {subTab === "overview" && <OverviewPanel sessions={sessions} />}
+        {subTab === "tokens" && <TokensPanel data={tokenData} />}
         {subTab === "tools" && <ToolsPanel summaries={toolSummaries} />}
         {subTab === "agents" && <AgentsPanel sessions={sessions} />}
         {subTab === "timeline" && <TimelinePanel sessions={sessions} />}

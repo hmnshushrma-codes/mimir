@@ -208,13 +208,10 @@ describe("transcript-reader", () => {
 });
 
 describe("getContextLimit", () => {
-  it("returns known model limits", () => {
-    expect(getContextLimit("claude-opus-4-6")).toBe(200_000);
-    expect(getContextLimit("claude-sonnet-4-6")).toBe(200_000);
-  });
-
-  it("handles model with suffix via prefix match", () => {
-    expect(getContextLimit("claude-opus-4-6[1m]")).toBe(1_000_000);
+  it("returns known model limits (Claude Code uses 1M)", () => {
+    expect(getContextLimit("claude-opus-4-6")).toBe(1_000_000);
+    expect(getContextLimit("claude-sonnet-4-6")).toBe(1_000_000);
+    expect(getContextLimit("claude-haiku-4-5")).toBe(200_000);
   });
 
   it("returns default for unknown models", () => {
