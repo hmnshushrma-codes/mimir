@@ -10,8 +10,8 @@ on:
     paths:
       - "packages/web/**"
       - "packages/shared/**"
-      - "scripts/build-demo.sh"
-      - "scripts/deploy-demo.sh"
+      - "scripts/build-demo.*"
+      - "scripts/deploy-demo.*"
       - "pnpm-lock.yaml"
       - ".github/workflows/deploy-demo.yml"
   workflow_dispatch:
