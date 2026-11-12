@@ -18,3 +18,8 @@ export function settingsPathFor(options: { project: boolean; cwd?: string }): st
 export function hookScriptPath(): string {
   return path.join(os.homedir(), ".claude", "agent-workshop", "hook-runner.mjs");
 }
+
+/** Stable destination for the PermissionRequest hook script. */
+export function permHookScriptPath(): string {
+  return path.join(os.homedir(), ".claude", "agent-workshop", "perm-hook.mjs");
+}

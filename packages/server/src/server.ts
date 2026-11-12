@@ -62,6 +62,8 @@ import {
   type TranscriptReaderState,
   type SessionTokenSummary,
 } from "./transcript-reader.js";
+import { getOrCreateToken, validateToken } from "./auth-token.js";
+import { PermissionManager, type PermissionDecision } from "./permission-manager.js";
 
 export interface BuildAppOptions {
   config: ServerConfig;
@@ -568,7 +570,146 @@ export function buildApp({
     return getPendingPermissions(db);
   });
 
+  // ── Phase B: Remote Permission Approval ──
+  const authToken = getOrCreateToken();
+  const permManager = new PermissionManager();
+
+  /** Validate the auth token from request headers. */
+  function requireToken(request: { headers: Record<string, string | undefined> }, reply: { code: (n: number) => void }): boolean {
+    const provided = request.headers["x-mimir-token"];
+    if (!validateToken(provided, authToken)) {
+      reply.code(401);
+      return false;
+    }
+    return true;
+  }
+
+  /** Validate Origin header for CSRF protection (browser requests only). */
+  function validateOrigin(request: { headers: Record<string, string | undefined> }): boolean {
+    const origin = request.headers.origin;
+    if (!origin) return true; // Non-browser requests (curl, hooks) don't send Origin
+    // Only allow same-origin requests
+    const allowed = [`http://localhost:${config.port}`, `http://127.0.0.1:${config.port}`, `http://mimir.local:${config.port}`];
+    return allowed.some((a) => origin === a);
+  }
+
+  /** Hook sends permission request here. */
+  app.post<{ Body: { sessionId: string; agentId: string; agentName?: string; toolName: string; toolInput?: unknown; cwd?: string; timestamp?: string } }>(
+    "/permissions/request",
+    async (request, reply) => {
+      if (!requireToken(request as any, reply as any)) return { error: "unauthorized" };
+
+      const { sessionId, agentId, agentName, toolName, toolInput, cwd } = request.body ?? {};
+      if (!sessionId || !toolName) {
+        reply.code(400);
+        return { error: "sessionId and toolName required" };
+      }
+
+      // Resolve project info from the model
+      const session = model.getSession(sessionId);
+      const projectId = session?.projectId;
+      const project = projectId ? model.getProjects().find((p) => p.id === projectId) : undefined;
+
+      const { id, existing, promise: _ } = permManager.register({
+        sessionId,
+        agentId: agentId ?? "main",
+        agentName: agentName ?? null,
+        projectName: project?.name ?? null,
+        branch: session?.branch ?? null,
+        toolName,
+        toolInput: toolInput ?? null,
+        cwd: cwd ?? null,
+      });
+
+      if (!existing) {
+        // Broadcast to browser
+        const pending = permManager.get(id);
+        if (pending) {
+          hub.broadcast({ type: "permission_request", payload: permManager.serialize(pending) as unknown as PermissionRequestPayload });
+        }
+      }
+
+      return { id, existing };
+    }
+  );
+
+  /** Browser sends decision here. */
+  app.post<{ Body: { id: string; decision: "allow" | "deny"; reason?: string } }>(
+    "/permissions/decide",
+    async (request, reply) => {
+      if (!requireToken(request as any, reply as any)) return { error: "unauthorized" };
+      if (!validateOrigin(request as any)) {
+        reply.code(403);
+        return { error: "origin not allowed" };
+      }
+
+      const { id, decision, reason } = request.body ?? {};
+      if (!id || !decision || !["allow", "deny"].includes(decision)) {
+        reply.code(400);
+        return { error: "id and decision (allow|deny) required" };
+      }
+
+      const d: PermissionDecision = { behavior: decision, reason, source: "dashboard" };
+      const resolved = permManager.decide(id, d);
+      if (!resolved) {
+        reply.code(404);
+        return { error: "request not found or already decided" };
+      }
+
+      // Broadcast resolution
+      const pending = permManager.get(id);
+      hub.broadcast({ type: "permission_resolved", payload: { id, sessionId: pending?.sessionId ?? "", decision } as PermissionResolvedPayload });
+
+      return { ok: true };
+    }
+  );
+
+  /** Hook polls for decision here. Returns the decision if made, "pending" if still waiting. */
+  app.get<{ Params: { id: string } }>("/permissions/poll/:id", async (request, reply) => {
+    if (!requireToken(request as any, reply as any)) return { error: "unauthorized" };
+
+    const id = request.params.id;
+
+    // Check if still pending
+    const pending = permManager.get(id);
+    if (pending) {
+      return { decision: "pending", id };
+    }
+
+    // Check if recently decided
+    const recent = permManager.getRecentDecision(id);
+    if (recent) {
+      return { decision: recent.decision, reason: recent.reason, id };
+    }
+
+    // Not found — expired or never existed
+    reply.code(404);
+    return { error: "not found" };
+  });
+
+  /** List pending permission requests (for browser). */
+  app.get("/permissions/pending", async () => {
+    return permManager.listPending().map((p) => permManager.serialize(p));
+  });
+
+  /** Get the auth token (same-origin only, for the browser UI). */
+  app.get("/permissions/token", async (request, reply) => {
+    if (!validateOrigin(request as any)) {
+      reply.code(403);
+      return { error: "origin not allowed" };
+    }
+    return { token: authToken };
+  });
+
+  /** Get audit log. */
+  app.get("/permissions/audit", async (request, reply) => {
+    if (!requireToken(request as any, reply as any)) return { error: "unauthorized" };
+    return permManager.getAuditLog();
+  });
+
   const sweep = setInterval(() => {
+    // Sweep expired permission requests
+    permManager.sweepExpired();
     const now = new Date().toISOString();
     const agentTouched = [
       ...model.sweepPresence(now, config.idleMs, config.staleMs),
