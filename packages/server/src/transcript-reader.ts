@@ -13,7 +13,7 @@
  * deduped request, divided by a configurable model max.
  */
 
-import { readFileSync, statSync, existsSync } from "node:fs";
+import { readFileSync, statSync, existsSync, openSync, readSync, closeSync } from "node:fs";
 
 // ─── Types ──────────────────────────────────────────────────────────
 
@@ -58,12 +58,15 @@ export interface TranscriptReaderState {
 // ─── Model context limits ───────────────────────────────────────────
 
 /** Configurable max context window per model (tokens). */
+/** Context limits. Claude Code typically uses 1M context for all models
+ *  (the transcript model field doesn't include the [1m] suffix). */
 export const MODEL_CONTEXT_LIMITS: Record<string, number> = {
-  "claude-opus-4-6": 200_000,
-  "claude-sonnet-4-6": 200_000,
+  "claude-opus-4-6": 1_000_000,
+  "claude-opus-5-5": 1_000_000,
+  "claude-sonnet-4-6": 1_000_000,
+  "claude-sonnet-5-5": 1_000_000,
   "claude-haiku-4-5": 200_000,
-  // Claude Code with extended thinking can use up to 1M for some models
-  "claude-opus-4-6[1m]": 1_000_000,
+  "claude-haiku-5-5": 1_000_000,
 };
 
 export function getContextLimit(model: string): number {
@@ -126,11 +129,11 @@ export function readTranscriptIncremental(
 
   // Read only the new bytes
   const buf = Buffer.alloc(fileSize - state.byteOffset);
-  const fd = require("node:fs").openSync(filePath, "r");
+  const fd = openSync(filePath, "r");
   try {
-    require("node:fs").readSync(fd, buf, 0, buf.length, state.byteOffset);
+    readSync(fd, buf, 0, buf.length, state.byteOffset);
   } finally {
-    require("node:fs").closeSync(fd);
+    closeSync(fd);
   }
 
   state.byteOffset = fileSize;
