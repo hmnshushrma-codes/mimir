@@ -19,25 +19,43 @@ delegation, permission request, error, and celebration as it happens.
 - Smooth Bézier-curve arms, blinking eyes, breathing animations
 - States: typing, reading, thinking, error (scratch head), permission (raise hand), sleeping (eyes closed + Zzz), celebrate (thumbs up + sparkles)
 
-### Intelligence Layer
+### Token & Cost Intelligence
+
+![Tokens tab: conversations, responses, words, memory gauge, cost breakdown](packages/web/public/screenshots/tokens.png)
+
+- **Plain-English Token Dashboard** — conversations, AI responses, words written, memory usage
+- **Memory Gauge** — context window fill percentage with actionable tips (/compact, /clear)
+- **Cost Breakdown** — API-equivalent estimates with clear "not your actual bill" labeling
+- **Savings Tips** — automatic detection of context re-reads, long sessions, high memory usage
+- **Per-Session & Subagent Breakdown** — expandable rows showing token usage per agent
+
+### Permission Approval (Phase B)
+
+![Permission popup: destructive command with Allow/Deny buttons and mascot YES/NO signs](packages/web/public/screenshots/permission.png)
+
+- **Remote Approval** — answer Claude Code permission prompts from the browser dashboard
+- **Docked Side Panel** — full tool detail (command, file path, URL), risk tags, counting timer
+- **Risk Classification** — DESTRUCTIVE (rm -rf, force push, drop table), EXTERNAL (curl, git push)
+- **Clickable Mascot Signs** — YES/NO signs on characters answer the pending request
+- **First-Answer-Wins** — terminal and dashboard race; whoever answers first wins
+- **Secret Redaction** — API keys, tokens, passwords redacted in display (not in execution)
+- **Security** — auth token, Origin validation, single-use decisions, audit log
+
+### Analytics
 
 ![Analytics overview: sessions, agents, tool calls, failures, permissions, total time](packages/web/public/screenshots/analytics.png)
 
 - **Session Analytics** — agents, tool calls, failures, duration per session
 - **Tool Execution Analytics** — most used tools, success/failure rates, avg duration, retries
 - **Agent Performance** — per-session agent metrics
-- **Token Usage Accounting** — extracted from Claude Code transcript files (opt-in)
-- **Cost Intelligence** — pricing registry for Claude Opus/Sonnet/Haiku, cost calculation from tokens
-- **Token Waste Detection** — repeated tool calls, redundant file reads, failed retries with confidence levels
-- **Prompt Quality Scoring** — 10-dimension deterministic assessment (no LLM needed), improvement suggestions
-- **Knowledge Intelligence** — CLAUDE.md detection, frequently accessed files, gap detection with recommendations
+- **Prompt Quality Scoring** — 10-dimension deterministic assessment (no LLM needed)
+- **Knowledge Intelligence** — CLAUDE.md detection, gap detection with recommendations
 - **Permission Tracking** — full lifecycle (request → pending → approved/cancelled with wait duration)
 
 ### Session Tools
 - **Timeline** — chronological tool call list per session
 - **Historical Replay** — play/pause/step through past sessions
 - **Session Comparison** — side-by-side metrics for two sessions
-- **Permission Queue** — pending approvals with agent and tool info
 
 ### Demo Mode
 - Interactive control bar: trigger permission requests, spawn agents, errors, finish
@@ -142,7 +160,7 @@ All via environment variables, all optional:
 ```bash
 pnpm install
 pnpm dev          # Collector (:4000) + Vite (:5173) with hot reload
-pnpm test         # 418 tests across all packages
+pnpm test         # 473 tests across all packages
 pnpm typecheck
 pnpm lint
 ```

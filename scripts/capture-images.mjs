@@ -71,6 +71,29 @@ try {
   await page.screenshot({ path: analytics, clip: { x: 0, y: 0, width: 1280, height: 440 } });
   console.log(`✓ ${analytics}`);
 
+  // Tokens subtab
+  const tokensBtn = page.locator("button.subtab", { hasText: "Tokens" });
+  if (await tokensBtn.isVisible()) {
+    await tokensBtn.click();
+    await page.waitForTimeout(1000);
+    const tokens = join(shotsDir, "tokens.png");
+    await page.screenshot({ path: tokens, clip: { x: 0, y: 0, width: 1280, height: 700 } });
+    console.log(`✓ ${tokens}`);
+  }
+
+  // Back to Workshop for permission popup screenshot
+  await page.getByRole("button", { name: "Workshop", exact: true }).click();
+  await page.waitForTimeout(500);
+  // Trigger a permission via demo control bar
+  const permBtn = page.locator("button.demo-btn", { hasText: "Destructive" });
+  if (await permBtn.isVisible()) {
+    await permBtn.click();
+    await page.waitForTimeout(800);
+    const permission = join(shotsDir, "permission.png");
+    await page.screenshot({ path: permission });
+    console.log(`✓ ${permission}`);
+  }
+
   const og = await browser.newPage({ viewport: { width: 1200, height: 630 }, deviceScaleFactor: 1 });
   const template = readFileSync(join(root, "scripts/og-template.html"), "utf-8").replace(
     "{{WORKSHOP}}",
