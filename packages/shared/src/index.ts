@@ -18,3 +18,4 @@ export * from "./prompt-quality.js";
 export * from "./prompt-improvement.js";
 export * from "./knowledge-inventory.js";
 export * from "./knowledge-gaps.js";
+export * from "./redact.js";

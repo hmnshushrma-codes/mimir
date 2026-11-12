@@ -1,4 +1,4 @@
-import { WorkshopModel, serializeAgent, serializeProject, serializeSession, type HookEventEnvelope } from "@agent-workshop/shared";
+import { WorkshopModel, serializeAgent, serializeProject, serializeSession, classifyRisk, type HookEventEnvelope, type PermissionRequestPayload } from "@agent-workshop/shared";
 import { useWorkshopStore } from "../store/useWorkshopStore.js";
 import { DEMO_STEPS, DEMO_TOTAL_DURATION_MS, STRESS_STEPS, STRESS_TOTAL_DURATION_MS } from "./demoScenario.js";
 import { PUBLIC_DEMO_STEPS, PUBLIC_DEMO_TOTAL_MS } from "./publicDemoScript.js";
@@ -43,8 +43,48 @@ export function triggerDemoEvent(type: string): void {
   let payload: Record<string, unknown>;
   switch (type) {
     case "permission":
-      payload = { hook_event_name: "Notification", notification_type: "permission_prompt", message: "Allow this action?" };
+    case "perm_bash":
+    case "perm_edit":
+    case "perm_force_push": {
+      // Specific permission scenarios
+      const scenarios: Record<string, { tool: string; input: Record<string, unknown>; msg: string }> = {
+        permission: { tool: "Bash", input: { command: "npm run deploy:staging" }, msg: "Run deploy to staging?" },
+        perm_bash: { tool: "Bash", input: { command: "rm -rf dist/ && npm run build" }, msg: "Delete dist and rebuild?" },
+        perm_edit: { tool: "Write", input: { file_path: "/home/user/project/src/config.ts" }, msg: "Write to config.ts?" },
+        perm_force_push: { tool: "Bash", input: { command: "git push --force origin main" }, msg: "Force push to main?" },
+      };
+      const s = scenarios[type] ?? scenarios.permission;
+
+      // Fire PreToolUse first (so mascot enters needs_permission after Notification)
+      const prePayload = { hook_event_name: "PreToolUse", tool_name: s.tool, tool_input: s.input, tool_use_id: `perm-tool-${id}` };
+      {
+        const preEnv = { ...prePayload, session_id: activeSessionId, timestamp: now } as HookEventEnvelope;
+        const r = activeModel.ingest(preEnv, project);
+        useWorkshopStore.getState().applyEvent(r.workshopEvent, serializeProject(r.project), serializeAgent(r.agent));
+      }
+
+      // Now the Notification
+      payload = { hook_event_name: "Notification", notification_type: "permission_prompt", message: s.msg };
+
+      // Also fire the enriched permission into the store (no server in demo)
+      const detail = typeof s.input.command === "string" ? s.input.command : (typeof s.input.file_path === "string" ? s.input.file_path : null);
+      const permPayload: PermissionRequestPayload = {
+        id: `perm-${activeSessionId}-main-${now}`,
+        sessionId: activeSessionId!,
+        agentId: "main",
+        agentName: "main",
+        projectName: typeof project === "string" ? project : (project as { name?: string }).name ?? "demo",
+        branch: "main",
+        toolName: s.tool,
+        detail,
+        message: s.msg,
+        risk: detail ? classifyRisk(detail) : null,
+        requestedAt: now,
+      };
+      // Defer so the model event processes first
+      setTimeout(() => useWorkshopStore.getState().addPermissionRequest(permPayload), 10);
       break;
+    }
     case "spawn":
       payload = { hook_event_name: "SubagentStart", agent_id: `demo-agent-${id}`, agent_type: "general-purpose", task_description: `Triggered task ${id}` };
       break;
@@ -60,9 +100,23 @@ export function triggerDemoEvent(type: string): void {
       break;
     case "finish":
       payload = { hook_event_name: "Stop", last_assistant_message: "All done!" };
+      // Dismiss any pending permissions for this session
+      setTimeout(() => {
+        const store = useWorkshopStore.getState();
+        for (const p of store.pendingPermissions) {
+          if (p.sessionId === activeSessionId) store.resolvePermission(p.id);
+        }
+      }, 10);
       break;
     case "end_session":
       payload = { hook_event_name: "SessionEnd", reason: "prompt_input_exit" };
+      // Dismiss any pending permissions for this session
+      setTimeout(() => {
+        const store = useWorkshopStore.getState();
+        for (const p of store.pendingPermissions) {
+          if (p.sessionId === activeSessionId) store.resolvePermission(p.id);
+        }
+      }, 10);
       break;
     default:
       return;

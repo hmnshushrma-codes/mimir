@@ -133,15 +133,7 @@ export function WorkshopView() {
 
   const projectGroups = useMemo(() => groupByProject(sortedLiveSessions), [sortedLiveSessions]);
 
-  const latestPromptBySession = useMemo(() => {
-    const map = new Map<string, string>();
-    for (const entry of timeline) {
-      if (entry.event.hookEventName === "UserPromptSubmit" && entry.event.target) {
-        map.set(entry.event.sessionId, entry.event.target);
-      }
-    }
-    return map;
-  }, [timeline]);
+  const promptHistory = useWorkshopStore((s) => s.promptHistory);
 
   const selectedAgent = selectedAgentId ? (sessions[selectedAgentId.sessionId]?.agents.find((a) => a.id === selectedAgentId.agentId) ?? null) : null;
   const selectedOrdinal = selectedAgentId
@@ -177,7 +169,11 @@ export function WorkshopView() {
           <div className="desk-grid">
             {Array.from(projectGroups.entries()).map(([projectId, projectSessions]) => {
               // Latest prompt across all sessions in this project
-              const projectPrompt = projectSessions.reduce<string | null>((best, s) => latestPromptBySession.get(s.id) ?? best, null);
+              const projectPrompts = projectSessions.reduce<import("../store/useWorkshopStore.js").PromptEntry[]>((best, s) => {
+                const h = promptHistory[s.id];
+                return h && h.length > 0 ? h : best;
+              }, []);
+              const projectPrompt = projectPrompts[0]?.text ?? null;
               return (
                 <div key={projectId} className="project-group">
                   <ProjectSign
@@ -188,7 +184,7 @@ export function WorkshopView() {
                     {/* User desk hidden in demo mode — no real user avatar */}
                     {!isDemoMode() && (
                       <div className="project-user-desk">
-                        <UserDesk latestPrompt={projectPrompt} avatar={avatar} onEditAvatar={() => setShowWizard(true)} />
+                        <UserDesk latestPrompt={projectPrompt} promptHistory={projectPrompts} nowMs={nowMs} avatar={avatar} onEditAvatar={() => setShowWizard(true)} />
                       </div>
                     )}
                     <AnimatePresence>
@@ -197,7 +193,7 @@ export function WorkshopView() {
                           key={session.id}
                           session={session}
                           projectName={displayNames[session.projectId] ?? "unknown"}
-                          latestPrompt={latestPromptBySession.get(session.id) ?? null}
+                          latestPrompt={promptHistory[session.id]?.[0]?.text ?? null}
                           selectedAgentId={selectedAgentId?.sessionId === session.id ? selectedAgentId.agentId : null}
                           onSelectAgent={(agentId) => setSelectedAgentId({ sessionId: session.id, agentId })}
                           onFocus={() => setFocusedSession(focusedSessionId === session.id ? null : session.id)}

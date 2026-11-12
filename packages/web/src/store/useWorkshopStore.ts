@@ -1,5 +1,5 @@
 import { create } from "zustand";
-import type { SerializedAgent, SerializedProject, SerializedSession, WorkshopEvent } from "@agent-workshop/shared";
+import type { SerializedAgent, SerializedProject, SerializedSession, WorkshopEvent, PermissionRequestPayload } from "@agent-workshop/shared";
 
 export type ConnectionStatus = "connecting" | "live" | "disconnected" | "demo";
 
@@ -26,6 +26,16 @@ export interface TimelineEntry {
   event: WorkshopEvent;
 }
 
+export interface PromptEntry {
+  text: string;
+  timestamp: string;
+}
+
+/** Per-session prompt history (most recent first, max 5 per session). */
+export type PromptHistory = Map<string, PromptEntry[]>;
+
+const MAX_PROMPT_HISTORY = 5;
+
 interface WorkshopStoreState {
   status: ConnectionStatus;
   projects: Record<string, SerializedProject>;
@@ -34,6 +44,10 @@ interface WorkshopStoreState {
   projectFilter: string | null;
   focusedSessionId: string | null;
   timeline: TimelineEntry[];
+  /** Dedicated prompt history — never lost when timeline trims */
+  promptHistory: Record<string, PromptEntry[]>;
+  /** Pending permission requests (queue, ordered by time) */
+  pendingPermissions: PermissionRequestPayload[];
   debugOverlayEnabled: boolean;
   setStatus: (status: ConnectionStatus) => void;
   applySnapshot: (payload: { projects: SerializedProject[]; sessions: SerializedSession[] }) => void;
@@ -49,6 +63,8 @@ interface WorkshopStoreState {
    *  snapshot already carries the correct current state; this just backfills
    *  the event feed for sessions that were already running. */
   backfillTimeline: (events: WorkshopEvent[]) => void;
+  addPermissionRequest: (perm: PermissionRequestPayload) => void;
+  resolvePermission: (id: string) => void;
 }
 
 const MAX_TIMELINE_ENTRIES = 500;
@@ -68,6 +84,8 @@ export const useWorkshopStore = create<WorkshopStoreState>((set, get) => ({
   projectFilter: null,
   focusedSessionId: null,
   timeline: [],
+  promptHistory: {},
+  pendingPermissions: [],
   debugOverlayEnabled: loadDebugOverlayEnabled(),
 
   setStatus: (status) => set({ status }),
@@ -79,7 +97,7 @@ export const useWorkshopStore = create<WorkshopStoreState>((set, get) => ({
     for (const session of sessions) bySessionId[session.id] = session;
     const currentActive = get().activeSessionId;
     const activeSessionId = currentActive && bySessionId[currentActive] ? currentActive : (sessions[0]?.id ?? null);
-    set({ projects: byProjectId, sessions: bySessionId, activeSessionId });
+    set({ projects: byProjectId, sessions: bySessionId, activeSessionId, promptHistory: {} });
   },
 
   applyEvent: (event, project, agent) => {
@@ -96,11 +114,22 @@ export const useWorkshopStore = create<WorkshopStoreState>((set, get) => ({
       };
       const session = upsertAgent({ ...existing, projectId: project.id }, agent);
       const timeline = [...state.timeline, { id: nextTimelineId++, event }].slice(-MAX_TIMELINE_ENTRIES);
+
+      // Track prompts in a dedicated field so they survive timeline trimming
+      let promptHistory = state.promptHistory;
+      if (event.hookEventName === "UserPromptSubmit" && event.target) {
+        const sid = event.sessionId;
+        const prev = state.promptHistory[sid] ?? [];
+        const entry: PromptEntry = { text: event.target, timestamp: event.timestamp };
+        promptHistory = { ...state.promptHistory, [sid]: [entry, ...prev].slice(0, MAX_PROMPT_HISTORY) };
+      }
+
       return {
         projects: { ...state.projects, [project.id]: project },
         sessions: { ...state.sessions, [session.id]: session },
         activeSessionId: state.activeSessionId ?? session.id,
-        timeline
+        timeline,
+        promptHistory,
       };
     });
   },
@@ -137,7 +166,35 @@ export const useWorkshopStore = create<WorkshopStoreState>((set, get) => ({
         .map((event) => ({ id: nextTimelineId++, event }));
       if (additions.length === 0) return state;
       const merged = [...additions, ...state.timeline].sort((a, b) => Date.parse(a.event.timestamp) - Date.parse(b.event.timestamp));
-      return { timeline: merged.slice(-MAX_TIMELINE_ENTRIES) };
+
+      // Extract prompts from backfilled events
+      const promptHistory = { ...state.promptHistory };
+      for (const event of events) {
+        if (event.hookEventName === "UserPromptSubmit" && event.target) {
+          const sid = event.sessionId;
+          const prev = promptHistory[sid] ?? [];
+          // Only add if not already present (dedup by timestamp)
+          if (!prev.some((p) => p.timestamp === event.timestamp)) {
+            promptHistory[sid] = [{ text: event.target, timestamp: event.timestamp }, ...prev]
+              .sort((a, b) => Date.parse(b.timestamp) - Date.parse(a.timestamp))
+              .slice(0, MAX_PROMPT_HISTORY);
+          }
+        }
+      }
+
+      return { timeline: merged.slice(-MAX_TIMELINE_ENTRIES), promptHistory };
     });
-  }
+  },
+
+  addPermissionRequest: (perm) => {
+    set((state) => ({
+      pendingPermissions: [...state.pendingPermissions.filter((p) => p.id !== perm.id), perm],
+    }));
+  },
+
+  resolvePermission: (id) => {
+    set((state) => ({
+      pendingPermissions: state.pendingPermissions.filter((p) => p.id !== id),
+    }));
+  },
 }));

@@ -2,6 +2,7 @@ import type { ActionCategory } from "./categories.js";
 import { categorizeTool } from "./categories.js";
 import type { AgentEvent } from "./agent-state.js";
 import type { HookEventEnvelope } from "./raw-hook-events.js";
+import { redactSecrets } from "./redact.js";
 import {
   NotificationDetailSchema,
   PostToolUseDetailSchema,
@@ -59,7 +60,8 @@ export function stripSystemMessages(text: string | null): string | null {
     .replace(/<task-notification>[\s\S]*?<\/task-notification>/g, "")
     .replace(/<system-reminder>[\s\S]*?<\/system-reminder>/g, "")
     .trim();
-  return cleaned.length > 0 ? cleaned : null;
+  if (cleaned.length === 0) return null;
+  return redactSecrets(cleaned);
 }
 
 export function normalizeToWorkshopEvent(envelope: HookEventEnvelope): WorkshopEvent {

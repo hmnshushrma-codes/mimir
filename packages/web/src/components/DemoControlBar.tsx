@@ -16,6 +16,15 @@ export function DemoControlBar({ onTrigger }: DemoControlBarProps) {
       <button className="demo-btn" onClick={() => onTrigger("permission")}>
         🖐 Permission
       </button>
+      <button className="demo-btn" onClick={() => onTrigger("perm_bash")} title="rm -rf dist/">
+        💀 Destructive
+      </button>
+      <button className="demo-btn" onClick={() => onTrigger("perm_force_push")} title="git push --force">
+        ⚠️ Force Push
+      </button>
+      <button className="demo-btn" onClick={() => onTrigger("perm_edit")} title="Write config.ts">
+        📝 File Edit
+      </button>
       <button className="demo-btn" onClick={() => onTrigger("spawn")}>
         ➕ Spawn Agent
       </button>
