@@ -33,7 +33,10 @@ export function buildSessionAnalytics(
   ]);
 
   const startMs = Date.parse(session.startedAt);
-  const endMs = session.status === "ended" ? Date.parse(session.lastEventAt) : null;
+  const lastMs = Date.parse(session.lastEventAt);
+  // Wall clock duration: always computed from lastEventAt - startedAt,
+  // not just for ended sessions. This fixes the "0ms / —" display bug.
+  const wallClockMs = Number.isFinite(lastMs - startMs) && lastMs > startMs ? lastMs - startMs : null;
 
   let permissionRequests = 0;
   for (const agent of agents) {
@@ -44,8 +47,8 @@ export function buildSessionAnalytics(
     sessionId: session.id,
     projectId: session.projectId,
     startedAt: session.startedAt,
-    endedAt: endMs !== null ? session.lastEventAt : null,
-    durationMs: endMs !== null ? endMs - startMs : null,
+    endedAt: session.status === "ended" ? session.lastEventAt : null,
+    durationMs: wallClockMs,
     agentCount: agents.length,
     subagentCount: agents.filter((a) => a.id !== MAIN_AGENT_ID).length,
     toolCallCount: allToolCalls.length,
