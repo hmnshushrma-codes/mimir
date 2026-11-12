@@ -7,6 +7,7 @@ import {
   readTranscriptIncremental,
   buildSummary,
   getContextLimit,
+  readSubagentTranscripts,
 } from "./transcript-reader.js";
 
 function makeAssistantLine(requestId: string, inputTokens: number, outputTokens: number, cacheCreate = 0, cacheRead = 0, model = "claude-opus-4-6") {
@@ -204,6 +205,56 @@ describe("transcript-reader", () => {
 
     const summary = buildSummary("s1", file, state);
     expect(summary.model).toBe("claude-opus-4-6");
+  });
+});
+
+describe("readSubagentTranscripts", () => {
+  let tmpDir: string;
+
+  beforeEach(() => { tmpDir = mkdtempSync(join(os.tmpdir(), "subagent-test-")); });
+  afterEach(() => { rmSync(tmpDir, { recursive: true, force: true }); });
+
+  it("discovers and reads subagent transcript files", () => {
+    // Main transcript: <tmpDir>/session123.jsonl
+    const mainPath = join(tmpDir, "session123.jsonl");
+    writeFileSync(mainPath, makeAssistantLine("req1", 1000, 500) + "\n");
+
+    // Subagent dir: <tmpDir>/session123/subagents/
+    const { mkdirSync } = require("node:fs");
+    const subDir = join(tmpDir, "session123", "subagents");
+    mkdirSync(subDir, { recursive: true });
+
+    // Two subagent transcripts
+    writeFileSync(join(subDir, "agent-abc123.jsonl"), [
+      makeAssistantLine("sa-req1", 200, 100, 0, 0, "claude-sonnet-4-6"),
+      makeAssistantLine("sa-req2", 300, 150, 0, 0, "claude-sonnet-4-6"),
+    ].join("\n") + "\n");
+
+    writeFileSync(join(subDir, "agent-def456.jsonl"), [
+      makeAssistantLine("sa-req3", 400, 200, 5000, 0, "claude-haiku-4-5"),
+    ].join("\n") + "\n");
+
+    const results = readSubagentTranscripts(mainPath);
+    expect(results).toHaveLength(2);
+
+    const abc = results.find((r) => r.agentId === "abc123");
+    expect(abc).toBeDefined();
+    expect(abc!.model).toBe("claude-sonnet-4-6");
+    expect(abc!.apiCalls).toBe(2);
+    expect(abc!.inputTokens).toBe(500);
+    expect(abc!.outputTokens).toBe(250);
+
+    const def = results.find((r) => r.agentId === "def456");
+    expect(def).toBeDefined();
+    expect(def!.model).toBe("claude-haiku-4-5");
+    expect(def!.apiCalls).toBe(1);
+    expect(def!.cacheCreationTokens).toBe(5000);
+  });
+
+  it("returns empty array when no subagent dir exists", () => {
+    const mainPath = join(tmpDir, "nosubagents.jsonl");
+    writeFileSync(mainPath, makeAssistantLine("req1", 100, 50) + "\n");
+    expect(readSubagentTranscripts(mainPath)).toEqual([]);
   });
 });
 

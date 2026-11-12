@@ -283,7 +283,28 @@ function formatTokens(n: number): string {
   return String(n);
 }
 
+interface SubagentTokenRow {
+  agentId: string;
+  model: string | null;
+  apiCalls: number;
+  inputTokens: number;
+  outputTokens: number;
+  cacheCreationTokens: number;
+  cacheReadTokens: number;
+}
+
 function TokensPanel({ data }: { data: any[] }) {
+  const [subagents, setSubagents] = useState<SubagentTokenRow[]>([]);
+  const [expandedSession, setExpandedSession] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!expandedSession || isDemoMode()) return;
+    fetch(`${API}/analytics/tokens/${expandedSession}/subagents`)
+      .then((r) => r.ok ? r.json() : [])
+      .then(setSubagents)
+      .catch(() => setSubagents([]));
+  }, [expandedSession]);
+
   if (data.length === 0) {
     return <p className="analytics-empty">No usage data yet — data appears after Claude finishes a tool call</p>;
   }
@@ -453,6 +474,59 @@ function TokensPanel({ data }: { data: any[] }) {
           )}
         </div>
       </div>
+
+      {/* ── Per-session breakdown with subagent expansion ── */}
+      {data.length > 1 && (
+        <div style={{ background: "var(--surface)", border: "1px solid var(--border)", borderRadius: 10, padding: 16 }}>
+          <strong style={{ fontSize: 13 }}>Per-Session Breakdown</strong>
+          <table className="analytics-table" style={{ marginTop: 10 }}>
+            <thead>
+              <tr><th>Session</th><th>Model</th><th style={{ textAlign: "right" }}>Responses</th><th style={{ textAlign: "right" }}>Words Out</th><th style={{ textAlign: "right" }}>Turns</th><th></th></tr>
+            </thead>
+            <tbody>
+              {data.map((s: any) => {
+                const isExpanded = expandedSession === s.sessionId;
+                return (
+                  <tr key={s.sessionId} style={{ cursor: "pointer" }} onClick={() => setExpandedSession(isExpanded ? null : s.sessionId)}>
+                    <td title={s.sessionId}>{s.sessionId?.slice(0, 8)}…</td>
+                    <td style={{ fontSize: 11 }}>{s.model ?? "—"}</td>
+                    <td style={{ textAlign: "right" }}>{s.apiCalls}</td>
+                    <td style={{ textAlign: "right" }}>{formatTokens(Math.round((s.outputTokens ?? 0) * 0.75))}</td>
+                    <td style={{ textAlign: "right" }}>{s.turnCount ?? 0}</td>
+                    <td style={{ fontSize: 11 }}>{isExpanded ? "▼" : "▶"}</td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
+      )}
+
+      {/* ── Subagent breakdown (expanded) ── */}
+      {expandedSession && subagents.length > 0 && (
+        <div style={{ background: "var(--surface)", border: "1px solid var(--border)", borderRadius: 10, padding: 16 }}>
+          <strong style={{ fontSize: 13 }}>Subagents in {expandedSession.slice(0, 8)}…</strong>
+          <p style={{ fontSize: 11, color: "var(--text-muted)", margin: "4px 0 10px" }}>
+            Agents spawned by Claude to handle subtasks — each uses its own tokens.
+          </p>
+          <table className="analytics-table">
+            <thead>
+              <tr><th>Agent</th><th>Model</th><th style={{ textAlign: "right" }}>Responses</th><th style={{ textAlign: "right" }}>Words Out</th><th style={{ textAlign: "right" }}>Input</th></tr>
+            </thead>
+            <tbody>
+              {subagents.map((a) => (
+                <tr key={a.agentId}>
+                  <td title={a.agentId}>{a.agentId.slice(0, 12)}{a.agentId.length > 12 ? "…" : ""}</td>
+                  <td style={{ fontSize: 11 }}>{a.model ?? "—"}</td>
+                  <td style={{ textAlign: "right" }}>{a.apiCalls}</td>
+                  <td style={{ textAlign: "right" }}>{formatTokens(Math.round(a.outputTokens * 0.75))}</td>
+                  <td style={{ textAlign: "right" }}>{formatTokens(a.inputTokens)}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
     </div>
   );
 }
