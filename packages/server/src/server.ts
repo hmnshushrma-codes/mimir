@@ -49,6 +49,15 @@ import { resolveProject } from "./project-resolver.js";
 import { WsHub } from "./ws-hub.js";
 import { DetectedSessionScanner } from "./detect-sessions.js";
 import { buildRecapTranscript, generateRecap as defaultGenerateRecap } from "./recap.js";
+import {
+  createReaderState,
+  readTranscriptIncremental,
+  buildSummary,
+  getContextLimit,
+  readSubagentTranscripts,
+  type TranscriptReaderState,
+  type SessionTokenSummary,
+} from "./transcript-reader.js";
 
 export interface BuildAppOptions {
   config: ServerConfig;
@@ -309,6 +318,12 @@ export function buildApp({
       }
     });
 
+    // Read transcript for token data (debounced — only on PostToolUse/Stop/SessionEnd)
+    const transcriptPath = (envelope as { transcript_path?: string }).transcript_path;
+    if (transcriptPath && ["PostToolUse", "PostToolUseFailure", "Stop", "SessionEnd"].includes(workshopEvent.hookEventName)) {
+      updateTokensForSession(workshopEvent.sessionId, transcriptPath);
+    }
+
     reply.code(204);
     return null;
   });
@@ -414,6 +429,50 @@ export function buildApp({
   });
 
   // ── Analytics API endpoints ──
+
+  // ── Transcript-based token tracking ──
+  // Per-session transcript readers, keyed by session_id
+  const transcriptReaders = new Map<string, { state: TranscriptReaderState; path: string }>();
+  const tokenSummaries = new Map<string, SessionTokenSummary>();
+
+  /** Read transcript for a session if a path is known. Debounced by the caller. */
+  function updateTokensForSession(sessionId: string, transcriptPath: string): SessionTokenSummary | null {
+    if (!transcriptPath) return null;
+    let reader = transcriptReaders.get(sessionId);
+    if (!reader) {
+      reader = { state: createReaderState(), path: transcriptPath };
+      transcriptReaders.set(sessionId, reader);
+    }
+    const changed = readTranscriptIncremental(reader.path, reader.state);
+    if (changed || !tokenSummaries.has(sessionId)) {
+      const summary = buildSummary(sessionId, reader.path, reader.state);
+      tokenSummaries.set(sessionId, summary);
+      return summary;
+    }
+    return tokenSummaries.get(sessionId) ?? null;
+  }
+
+  app.get("/analytics/tokens", async () => {
+    // Return token summaries for all known sessions
+    return Array.from(tokenSummaries.values());
+  });
+
+  app.get<{ Params: { id: string } }>("/analytics/tokens/:id", async (request) => {
+    const s = tokenSummaries.get(request.params.id);
+    if (!s) return { error: "no token data for this session" };
+    const limit = s.model ? getContextLimit(s.model) : 200_000;
+    return {
+      ...s,
+      contextLimit: limit,
+      contextUsagePercent: limit > 0 ? Math.round((s.latestContextTokens / limit) * 100) : null,
+    };
+  });
+
+  app.get<{ Params: { id: string } }>("/analytics/tokens/:id/subagents", async (request) => {
+    const reader = transcriptReaders.get(request.params.id);
+    if (!reader) return [];
+    return readSubagentTranscripts(reader.path);
+  });
 
   app.get("/analytics/sessions", async () => {
     return listSessionAnalytics(db);

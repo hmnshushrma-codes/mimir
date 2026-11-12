@@ -1,4 +1,4 @@
-import { useCallback, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { AnimatePresence, useReducedMotion } from "framer-motion";
 import { disambiguateProjectNames, type SerializedSession } from "@agent-workshop/shared";
 import { useWorkshopStore } from "../store/useWorkshopStore.js";
@@ -81,8 +81,50 @@ export function WorkshopView() {
     return list;
   }, [allSessions, activeProjectIds, projectFilter, focusedSessionId]);
 
-  const liveSessions = useMemo(() => visibleSessions.filter((s) => s.status !== "ended"), [visibleSessions]);
-  const endedSessions = useMemo(() => visibleSessions.filter((s) => s.status === "ended"), [visibleSessions]);
+  // Sessions that just ended get a 4-second sleep delay before removal.
+  // Track which session IDs are in the "sleeping before removal" phase.
+  const [sleepingSessionIds, setSleepingSessionIds] = useState<Set<string>>(new Set());
+  const sleepTimers = useRef(new Map<string, ReturnType<typeof setTimeout>>());
+
+  // When a session transitions to "ended", start the sleep timer
+  useEffect(() => {
+    for (const s of allSessions) {
+      if (s.status === "ended" && !sleepingSessionIds.has(s.id) && !sleepTimers.current.has(s.id)) {
+        // Mark as sleeping
+        setSleepingSessionIds((prev) => new Set([...prev, s.id]));
+        // After 4 seconds, remove from live view
+        const timer = setTimeout(() => {
+          setSleepingSessionIds((prev) => {
+            const next = new Set(prev);
+            next.delete(s.id);
+            return next;
+          });
+          sleepTimers.current.delete(s.id);
+        }, 4000);
+        sleepTimers.current.set(s.id, timer);
+      }
+      // Resume: if a session comes back to active while sleeping, cancel removal
+      if (s.status === "active" && sleepTimers.current.has(s.id)) {
+        clearTimeout(sleepTimers.current.get(s.id));
+        sleepTimers.current.delete(s.id);
+        setSleepingSessionIds((prev) => {
+          const next = new Set(prev);
+          next.delete(s.id);
+          return next;
+        });
+      }
+    }
+  }, [allSessions]);
+
+  // Live = active + idle + sleeping (still showing)
+  const liveSessions = useMemo(() =>
+    visibleSessions.filter((s) => s.status !== "ended" || sleepingSessionIds.has(s.id)),
+    [visibleSessions, sleepingSessionIds]
+  );
+  const endedSessions = useMemo(() =>
+    visibleSessions.filter((s) => s.status === "ended" && !sleepingSessionIds.has(s.id)),
+    [visibleSessions, sleepingSessionIds]
+  );
 
   const sortedLiveSessions = useMemo(
     () => sortByAttention(liveSessions, (s) => s.agents.map((a) => a.displayState)),

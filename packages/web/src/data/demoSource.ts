@@ -61,6 +61,9 @@ export function triggerDemoEvent(type: string): void {
     case "finish":
       payload = { hook_event_name: "Stop", last_assistant_message: "All done!" };
       break;
+    case "end_session":
+      payload = { hook_event_name: "SessionEnd", reason: "prompt_input_exit" };
+      break;
     default:
       return;
   }

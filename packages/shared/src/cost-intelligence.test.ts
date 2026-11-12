@@ -13,17 +13,17 @@ import {
 } from "./token-accounting.js";
 
 describe("PricingRegistry", () => {
-  it("has 3 default Claude models", () => {
+  it("has 6 default Claude models", () => {
     const registry = new PricingRegistry();
-    expect(registry.list()).toHaveLength(3);
+    expect(registry.list()).toHaveLength(6);
   });
 
-  it("looks up by exact model name", () => {
+  it("looks up by exact model name with verified pricing", () => {
     const registry = new PricingRegistry();
     const opus = registry.get("claude-opus-4-6");
     expect(opus).not.toBeNull();
-    expect(opus!.inputPricePerMToken).toBe(15.0);
-    expect(opus!.outputPricePerMToken).toBe(75.0);
+    expect(opus!.inputPricePerMToken).toBe(5.0);   // NOT $15 (that's retired Opus 4.1)
+    expect(opus!.outputPricePerMToken).toBe(25.0);  // NOT $75
   });
 
   it("looks up by prefix match (model with suffix)", () => {
@@ -55,14 +55,14 @@ describe("PricingRegistry", () => {
     const custom = registry.get("my-model");
     expect(custom).not.toBeNull();
     expect(custom!.currency).toBe("EUR");
-    expect(registry.list()).toHaveLength(4);
+    expect(registry.list()).toHaveLength(7);
   });
 });
 
 describe("calculateCost", () => {
   const registry = new PricingRegistry();
 
-  it("calculates correct costs for Opus with known tokens", () => {
+  it("calculates correct costs for Opus 4.6 with verified pricing", () => {
     const usage: TokenUsage = {
       inputTokens: { value: 10_000, availability: "measured", source: "transcript" },
       outputTokens: { value: 5_000, availability: "measured", source: "transcript" },
@@ -71,20 +71,20 @@ describe("calculateCost", () => {
     };
 
     const cost = calculateCost(usage, "claude-opus-4-6", registry);
-    // input: 10k * $15/M = $0.15
-    expect(cost.inputCost.value).toBeCloseTo(0.15, 4);
-    // output: 5k * $75/M = $0.375
-    expect(cost.outputCost.value).toBeCloseTo(0.375, 4);
-    // cache: 20k * $18.75/M + 15k * $1.50/M = $0.375 + $0.0225 = $0.3975
-    expect(cost.cacheCost.value).toBeCloseTo(0.3975, 4);
-    // total: 0.15 + 0.375 + 0.3975 = $0.9225
-    expect(cost.totalCost.value).toBeCloseTo(0.9225, 4);
+    // input: 10k * $5/M = $0.05
+    expect(cost.inputCost.value).toBeCloseTo(0.05, 4);
+    // output: 5k * $25/M = $0.125
+    expect(cost.outputCost.value).toBeCloseTo(0.125, 4);
+    // cache: 20k * $6.25/M + 15k * $0.50/M = $0.125 + $0.0075 = $0.1325
+    expect(cost.cacheCost.value).toBeCloseTo(0.1325, 4);
+    // total: 0.05 + 0.125 + 0.1325 = $0.3075
+    expect(cost.totalCost.value).toBeCloseTo(0.3075, 4);
     expect(cost.totalCost.availability).toBe("measured");
     expect(cost.currency).toBe("USD");
     expect(cost.model).toBe("claude-opus-4-6");
   });
 
-  it("calculates correct costs for Sonnet", () => {
+  it("calculates correct costs for Sonnet 4.6", () => {
     const usage: TokenUsage = {
       inputTokens: { value: 100_000, availability: "measured", source: "transcript" },
       outputTokens: { value: 10_000, availability: "measured", source: "transcript" },
@@ -198,17 +198,17 @@ describe("integration — full pipeline: transcript → tokens → cost", () => 
     expect(cost.currency).toBe("USD");
     expect(cost.model).toBe("claude-opus-4-6");
 
-    // Verify math:
-    // input: 28700 * $15/M = $0.4305
-    expect(cost.inputCost.value).toBeCloseTo(0.4305, 3);
-    // output: 4700 * $75/M = $0.3525
-    expect(cost.outputCost.value).toBeCloseTo(0.3525, 3);
-    // cache: 15200 * $18.75/M + 30000 * $1.50/M = $0.285 + $0.045 = $0.330
-    expect(cost.cacheCost.value).toBeCloseTo(0.330, 3);
-    // total: 0.4305 + 0.3525 + 0.330 = $1.113
-    expect(cost.totalCost.value).toBeCloseTo(1.113, 2);
+    // Verify math with corrected Opus 4.6 pricing ($5/$25 not $15/$75):
+    // input: 28700 * $5/M = $0.1435
+    expect(cost.inputCost.value).toBeCloseTo(0.1435, 3);
+    // output: 4700 * $25/M = $0.1175
+    expect(cost.outputCost.value).toBeCloseTo(0.1175, 3);
+    // cache: 15200 * $6.25/M + 30000 * $0.50/M = $0.095 + $0.015 = $0.110
+    expect(cost.cacheCost.value).toBeCloseTo(0.110, 3);
+    // total: 0.1435 + 0.1175 + 0.110 = $0.371
+    expect(cost.totalCost.value).toBeCloseTo(0.371, 2);
 
     // Formatted
-    expect(formatCost(cost.totalCost)).toBe("$1.11");
+    expect(formatCost(cost.totalCost)).toBe("$0.371");
   });
 });
