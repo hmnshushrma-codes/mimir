@@ -285,107 +285,174 @@ function formatTokens(n: number): string {
 
 function TokensPanel({ data }: { data: any[] }) {
   if (data.length === 0) {
-    return <p className="analytics-empty">No token data yet — token data is read from Claude Code transcript files after tool calls complete</p>;
+    return <p className="analytics-empty">No usage data yet — data appears after Claude finishes a tool call</p>;
   }
 
-  // Aggregate across sessions
   const totals = data.reduce((acc, s) => ({
     apiCalls: acc.apiCalls + (s.apiCalls ?? 0),
     input: acc.input + (s.inputTokens ?? 0),
     output: acc.output + (s.outputTokens ?? 0),
     cacheWrite: acc.cacheWrite + (s.cacheCreationTokens ?? 0),
     cacheRead: acc.cacheRead + (s.cacheReadTokens ?? 0),
-    turnDuration: acc.turnDuration + (s.totalTurnDurationMs ?? 0),
     turns: acc.turns + (s.turnCount ?? 0),
-  }), { apiCalls: 0, input: 0, output: 0, cacheWrite: 0, cacheRead: 0, turnDuration: 0, turns: 0 });
+  }), { apiCalls: 0, input: 0, output: 0, cacheWrite: 0, cacheRead: 0, turns: 0 });
 
-  // Estimate cost using the pricing from the shared package
   const registry = new PricingRegistry();
   const model = data[0]?.model ?? "claude-opus-4-6";
   const pricing = registry.get(model);
-  let estCost = 0;
-  if (pricing) {
-    estCost = (totals.input / 1e6) * pricing.inputPricePerMToken
-      + (totals.output / 1e6) * pricing.outputPricePerMToken
-      + (totals.cacheWrite / 1e6) * pricing.cacheCreationPricePerMToken
-      + (totals.cacheRead / 1e6) * pricing.cacheReadPricePerMToken;
-  }
 
-  // Context: latest session's context usage
+  // Cost breakdown
+  const costInput = pricing ? (totals.input / 1e6) * pricing.inputPricePerMToken : 0;
+  const costOutput = pricing ? (totals.output / 1e6) * pricing.outputPricePerMToken : 0;
+  const costCacheWrite = pricing ? (totals.cacheWrite / 1e6) * pricing.cacheCreationPricePerMToken : 0;
+  const costCacheRead = pricing ? (totals.cacheRead / 1e6) * pricing.cacheReadPricePerMToken : 0;
+  const totalCost = costInput + costOutput + costCacheWrite + costCacheRead;
+
+  // Context window
   const latest = data[0];
   const ctxTokens = latest?.latestContextTokens ?? 0;
-  const ctxLimit = 1_000_000; // default for Claude Code
+  const ctxLimit = 1_000_000;
   const ctxPercent = ctxLimit > 0 ? Math.round((ctxTokens / ctxLimit) * 100) : 0;
 
+  // Words approximation (1 token ≈ 0.75 words)
+  const wordsWritten = Math.round(totals.output * 0.75);
+  const contextWords = Math.round(ctxTokens * 0.75);
+
   return (
-    <div className="analytics-grid">
-      <div className="analytics-card">
-        <div className="analytics-card-value">{formatTokens(totals.input)}</div>
-        <div className="analytics-card-label">Input Tokens</div>
-      </div>
-      <div className="analytics-card">
-        <div className="analytics-card-value">{formatTokens(totals.output)}</div>
-        <div className="analytics-card-label">Output Tokens</div>
-      </div>
-      <div className="analytics-card">
-        <div className="analytics-card-value">{formatTokens(totals.cacheWrite)}</div>
-        <div className="analytics-card-label">Cache Write</div>
-      </div>
-      <div className="analytics-card">
-        <div className="analytics-card-value">{formatTokens(totals.cacheRead)}</div>
-        <div className="analytics-card-label">Cache Read</div>
-      </div>
-      <div className="analytics-card">
-        <div className="analytics-card-value" title="API-equivalent estimate — actual cost on Pro/Max plans may differ">
-          ${estCost < 1 ? estCost.toFixed(3) : estCost.toFixed(2)}
+    <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
+      {/* ── Hero cards: what a normal person cares about ── */}
+      <div className="analytics-grid">
+        <div className="analytics-card">
+          <div className="analytics-card-value">{totals.turns}</div>
+          <div className="analytics-card-label">Conversations</div>
         </div>
-        <div className="analytics-card-label">Est. Cost (API equiv.)</div>
-      </div>
-      <div className="analytics-card">
-        <div className="analytics-card-value" style={{ color: ctxPercent > 80 ? "var(--warn)" : ctxPercent > 95 ? "var(--error)" : undefined }}>
-          {ctxPercent}%
+        <div className="analytics-card">
+          <div className="analytics-card-value">{totals.apiCalls.toLocaleString()}</div>
+          <div className="analytics-card-label">AI Responses</div>
         </div>
-        <div className="analytics-card-label">Context Window</div>
+        <div className="analytics-card">
+          <div className="analytics-card-value">{wordsWritten >= 1000 ? `${(wordsWritten / 1000).toFixed(0)}K` : wordsWritten.toLocaleString()}</div>
+          <div className="analytics-card-label">Words Written by AI</div>
+        </div>
+        <div className="analytics-card">
+          <div className="analytics-card-value" style={{ color: ctxPercent > 80 ? "var(--warn)" : ctxPercent > 95 ? "var(--error)" : "var(--ok)" }}>
+            {ctxPercent}%
+          </div>
+          <div className="analytics-card-label">Memory Used</div>
+        </div>
       </div>
 
-      <div className="analytics-section">
-        <h3>Per Session</h3>
+      {/* ── Memory gauge ── */}
+      <div style={{ background: "var(--surface)", border: "1px solid var(--border)", borderRadius: 10, padding: 16 }}>
+        <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 8 }}>
+          <strong style={{ fontSize: 13 }}>AI Memory (Context Window)</strong>
+          <span style={{ fontSize: 12, color: "var(--text-muted)" }}>{contextWords.toLocaleString()} words / ~750K words max</span>
+        </div>
+        <div style={{ background: "var(--surface-alt)", borderRadius: 6, height: 20, overflow: "hidden" }}>
+          <div style={{
+            width: `${Math.min(ctxPercent, 100)}%`,
+            height: "100%",
+            borderRadius: 6,
+            background: ctxPercent > 90 ? "var(--error)" : ctxPercent > 70 ? "var(--warn)" : "var(--ok)",
+            transition: "width 0.5s ease",
+          }} />
+        </div>
+        <div style={{ fontSize: 11, color: "var(--text-muted)", marginTop: 6 }}>
+          {ctxPercent < 50 && "Plenty of memory left. No action needed."}
+          {ctxPercent >= 50 && ctxPercent < 80 && "Memory is filling up. Consider longer sessions may slow down."}
+          {ctxPercent >= 80 && ctxPercent < 95 && "⚠️ Memory is getting full. Use /compact to free up space, or /clear to start fresh."}
+          {ctxPercent >= 95 && "🔴 Memory almost full! Claude may forget earlier context. Use /clear to reset."}
+        </div>
+      </div>
+
+      {/* ── Cost breakdown (friendly) ── */}
+      <div style={{ background: "var(--surface)", border: "1px solid var(--border)", borderRadius: 10, padding: 16 }}>
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12 }}>
+          <strong style={{ fontSize: 13 }}>Cost Breakdown</strong>
+          <span style={{ fontSize: 11, color: "var(--text-muted)", background: "var(--surface-alt)", padding: "2px 8px", borderRadius: 4 }}>
+            API-equivalent estimate · not your actual bill
+          </span>
+        </div>
+        <div style={{ fontSize: 11, color: "var(--text-muted)", marginBottom: 12 }}>
+          If this session were billed at API rates ({model}). On Pro/Max plans, your actual cost is your subscription fee.
+        </div>
         <table className="analytics-table">
           <thead>
-            <tr><th>Session</th><th>Model</th><th>API Calls</th><th>Input</th><th>Output</th><th>Cache Write</th><th>Cache Read</th><th>Context</th><th>Turns</th></tr>
+            <tr><th>What</th><th style={{ textAlign: "right" }}>Amount</th><th style={{ textAlign: "right" }}>API Cost</th><th>What it means</th></tr>
           </thead>
           <tbody>
-            {data.map((s: any) => {
-              const sCtx = s.latestContextTokens ?? 0;
-              const sCtxPct = ctxLimit > 0 ? Math.round((sCtx / ctxLimit) * 100) : 0;
-              return (
-                <tr key={s.sessionId}>
-                  <td title={s.sessionId}>{s.sessionId.slice(0, 8)}…</td>
-                  <td>{s.model ?? "—"}</td>
-                  <td>{s.apiCalls?.toLocaleString()}</td>
-                  <td>{formatTokens(s.inputTokens ?? 0)}</td>
-                  <td>{formatTokens(s.outputTokens ?? 0)}</td>
-                  <td>{formatTokens(s.cacheCreationTokens ?? 0)}</td>
-                  <td>{formatTokens(s.cacheReadTokens ?? 0)}</td>
-                  <td style={{ color: sCtxPct > 80 ? "var(--warn)" : undefined }}>{sCtxPct}%</td>
-                  <td>{s.turnCount ?? 0}</td>
-                </tr>
-              );
-            })}
+            <tr>
+              <td>Your prompts</td>
+              <td style={{ textAlign: "right" }}>{formatTokens(totals.input)}</td>
+              <td style={{ textAlign: "right" }}>${costInput.toFixed(2)}</td>
+              <td style={{ color: "var(--text-muted)", fontSize: 11 }}>What you typed + context sent</td>
+            </tr>
+            <tr>
+              <td><strong>AI responses</strong></td>
+              <td style={{ textAlign: "right" }}><strong>{formatTokens(totals.output)}</strong></td>
+              <td style={{ textAlign: "right" }}><strong>${costOutput.toFixed(2)}</strong></td>
+              <td style={{ color: "var(--text-muted)", fontSize: 11 }}>Code, explanations, tool calls</td>
+            </tr>
+            <tr>
+              <td>New context loaded</td>
+              <td style={{ textAlign: "right" }}>{formatTokens(totals.cacheWrite)}</td>
+              <td style={{ textAlign: "right" }}>${costCacheWrite.toFixed(2)}</td>
+              <td style={{ color: "var(--text-muted)", fontSize: 11 }}>Files, docs, code read for first time</td>
+            </tr>
+            <tr>
+              <td>Context re-read</td>
+              <td style={{ textAlign: "right" }}>{formatTokens(totals.cacheRead)}</td>
+              <td style={{ textAlign: "right" }}>${costCacheRead.toFixed(2)}</td>
+              <td style={{ color: "var(--text-muted)", fontSize: 11 }}>Same context re-sent each turn (cached, 90% cheaper)</td>
+            </tr>
+            <tr style={{ borderTop: "2px solid var(--border)" }}>
+              <td><strong>Total</strong></td>
+              <td style={{ textAlign: "right" }}><strong>{formatTokens(totals.input + totals.output + totals.cacheWrite + totals.cacheRead)}</strong></td>
+              <td style={{ textAlign: "right" }}><strong>${totalCost.toFixed(2)}</strong></td>
+              <td></td>
+            </tr>
           </tbody>
         </table>
       </div>
 
-      {/* Context re-read cost insight */}
-      {totals.cacheRead > 100_000_000 && (
-        <div className="analytics-section" style={{ background: "var(--surface-alt)", padding: 12, borderRadius: 8 }}>
-          <strong style={{ color: "var(--warn)" }}>High context re-read cost</strong>
-          <p style={{ fontSize: 12, margin: "6px 0 0", color: "var(--text-muted)" }}>
-            {formatTokens(totals.cacheRead)} cache read tokens ({totals.cacheRead > 0 && pricing ? `$${((totals.cacheRead / 1e6) * pricing.cacheReadPricePerMToken).toFixed(2)}` : "—"}).
-            Consider using <code>/clear</code> or <code>/compact</code> when context stays above 80% for many turns.
-          </p>
+      {/* ── Savings tips ── */}
+      <div style={{ background: "var(--surface)", border: "1px solid var(--border)", borderRadius: 10, padding: 16 }}>
+        <strong style={{ fontSize: 13 }}>💡 How to Save Tokens</strong>
+        <div style={{ display: "flex", flexDirection: "column", gap: 10, marginTop: 10 }}>
+          {costCacheRead > costOutput && (
+            <div style={{ display: "flex", gap: 8, fontSize: 12 }}>
+              <span style={{ color: "var(--warn)", fontWeight: 700, minWidth: 20 }}>1.</span>
+              <div>
+                <strong>Context re-reads cost more than AI responses</strong> (${costCacheRead.toFixed(2)} vs ${costOutput.toFixed(2)}).
+                <span style={{ color: "var(--text-muted)" }}> Use <code>/compact</code> to shrink context, or <code>/clear</code> to start fresh when switching tasks.</span>
+              </div>
+            </div>
+          )}
+          {ctxPercent > 70 && (
+            <div style={{ display: "flex", gap: 8, fontSize: 12 }}>
+              <span style={{ color: "var(--warn)", fontWeight: 700, minWidth: 20 }}>{costCacheRead > costOutput ? "2." : "1."}</span>
+              <div>
+                <strong>Memory is {ctxPercent}% full</strong>.
+                <span style={{ color: "var(--text-muted)" }}> Each new message re-sends all {contextWords.toLocaleString()} words of context. Shorter context = faster + cheaper responses.</span>
+              </div>
+            </div>
+          )}
+          {totals.turns > 50 && (
+            <div style={{ display: "flex", gap: 8, fontSize: 12 }}>
+              <span style={{ color: "var(--accent)", fontWeight: 700, minWidth: 20 }}>💬</span>
+              <div>
+                <strong>{totals.turns} conversations in one session</strong>.
+                <span style={{ color: "var(--text-muted)" }}> Long sessions accumulate context. Consider starting a new session for unrelated tasks.</span>
+              </div>
+            </div>
+          )}
+          {totals.turns <= 50 && ctxPercent <= 70 && costCacheRead <= costOutput && (
+            <div style={{ fontSize: 12, color: "var(--ok)" }}>
+              ✅ Looking good! No obvious waste detected in this session.
+            </div>
+          )}
         </div>
-      )}
+      </div>
     </div>
   );
 }
