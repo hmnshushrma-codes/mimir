@@ -25,6 +25,9 @@ export function DemoControlBar({ onTrigger }: DemoControlBarProps) {
       <button className="demo-btn" onClick={() => onTrigger("finish")}>
         ✅ Finish
       </button>
+      <button className="demo-btn" onClick={() => onTrigger("end_session")} style={{ borderColor: "var(--error)" }}>
+        🛑 End Session
+      </button>
     </div>
   );
 }
