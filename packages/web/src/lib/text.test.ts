@@ -14,8 +14,13 @@ describe("truncate", () => {
 describe("relativeTime", () => {
   const now = Date.parse("2026-01-01T00:10:00.000Z");
 
-  it("reports just now for very recent times", () => {
-    expect(relativeTime("2026-01-01T00:09:55.000Z", now)).toBe("just now");
+  it("reports just now for < 5s", () => {
+    expect(relativeTime("2026-01-01T00:09:57.000Z", now)).toBe("just now");
+  });
+
+  it("reports seconds ago for 5-60s", () => {
+    expect(relativeTime("2026-01-01T00:09:55.000Z", now)).toBe("5s ago");
+    expect(relativeTime("2026-01-01T00:09:30.000Z", now)).toBe("30s ago");
   });
 
   it("reports minutes ago", () => {

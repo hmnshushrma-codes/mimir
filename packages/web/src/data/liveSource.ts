@@ -87,6 +87,12 @@ function handleMessage(raw: MessageEvent<string>): void {
     case "session_updated":
       store.applySessionUpdate(message.sessionId, message.session);
       break;
+    case "permission_request":
+      store.addPermissionRequest(message.payload);
+      break;
+    case "permission_resolved":
+      store.resolvePermission(message.payload.id);
+      break;
   }
 }
 

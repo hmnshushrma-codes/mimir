@@ -1,6 +1,8 @@
+import { useState } from "react";
 import { usePrefersDarkMode } from "../hooks/usePrefersDarkMode.js";
-import { truncate } from "../lib/text.js";
+import { truncate, relativeTime } from "../lib/text.js";
 import type { AvatarConfig, Expression } from "../characters/avatarConfig.js";
+import type { PromptEntry } from "../store/useWorkshopStore.js";
 
 const INK = "#2a2a2a";
 
@@ -99,13 +101,18 @@ function Mouth({ expression, isMale }: { expression: Expression; isMale: boolean
 
 export function UserDesk({
   latestPrompt,
+  promptHistory = [],
+  nowMs = Date.now(),
   avatar,
   onEditAvatar
 }: {
   latestPrompt: string | null;
+  promptHistory?: PromptEntry[];
+  nowMs?: number;
   avatar: AvatarConfig;
   onEditAvatar: () => void;
 }) {
+  const [expanded, setExpanded] = useState(false);
   const isDark = usePrefersDarkMode();
   const { gender, skinTone, hairStyle, hairColor, glasses, shirtColor, expression } = avatar;
 
@@ -230,7 +237,30 @@ export function UserDesk({
       </button>
 
       {latestPrompt ? (
-        <div className="user-speech-bubble">{truncate(latestPrompt, 80)}</div>
+        <div className="user-speech-bubble-wrap">
+          <div
+            className={`user-speech-bubble ${expanded ? "expanded" : ""}`}
+            onClick={() => setExpanded(!expanded)}
+            title={expanded ? "Click to collapse" : "Click to expand"}
+          >
+            {expanded ? latestPrompt : truncate(latestPrompt, 80)}
+          </div>
+          {promptHistory.length > 0 && (
+            <div className="prompt-time-ago">
+              {relativeTime(promptHistory[0].timestamp, nowMs)}
+            </div>
+          )}
+          {expanded && promptHistory.length > 1 && (
+            <div className="prompt-history">
+              {promptHistory.slice(1).map((p, i) => (
+                <div key={i} className="prompt-history-item">
+                  <span className="prompt-history-text">{truncate(p.text, 60)}</span>
+                  <span className="prompt-history-time">{relativeTime(p.timestamp, nowMs)}</span>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
       ) : (
         <div className="desk-label" style={{ fontWeight: 700 }}>You</div>
       )}

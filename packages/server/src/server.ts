@@ -13,8 +13,12 @@ import {
   serializeProject,
   serializeSession,
   buildSessionAnalytics,
+  redactSecrets,
+  classifyRisk,
   type ProjectRecord,
-  type SessionRecord
+  type SessionRecord,
+  type PermissionRequestPayload,
+  type PermissionResolvedPayload,
 } from "@agent-workshop/shared";
 import type { ServerConfig } from "./config.js";
 import {
@@ -234,6 +238,16 @@ export function buildApp({
     hub.broadcast({ type: "event", payload: workshopEvent, project: serializeProject(project), agent: serializeAgent(agent) });
 
     // ── Analytics persistence ──
+    // Cache last PreToolUse for permission enrichment
+    if (workshopEvent.hookEventName === "PreToolUse") {
+      const toolInput = (envelope as { tool_input?: unknown }).tool_input;
+      lastPreToolUse.set(`${workshopEvent.sessionId}:${workshopEvent.agentId}`, {
+        toolName: workshopEvent.toolName ?? "unknown",
+        toolInput,
+        toolUseId: workshopEvent.toolUseId,
+      });
+    }
+
     // Track tool call lifecycle
     if (workshopEvent.hookEventName === "PreToolUse" && workshopEvent.toolUseId) {
       insertToolCallAnalytics(db, {
@@ -261,28 +275,77 @@ export function buildApp({
     if (workshopEvent.hookEventName === "Notification") {
       const notificationType = (envelope as { notification_type?: string }).notification_type;
       if (notificationType === "permission_prompt") {
+        const permId = `perm-${workshopEvent.sessionId}-${workshopEvent.agentId}-${workshopEvent.timestamp}`;
+
+        // Enrich with last PreToolUse for this agent
+        const agentKey = `${workshopEvent.sessionId}:${workshopEvent.agentId}`;
+        const lastTool = lastPreToolUse.get(agentKey);
+        const toolName = lastTool?.toolName ?? null;
+        const toolInput = lastTool?.toolInput as Record<string, unknown> | undefined;
+
+        // Extract detail based on tool type
+        let detail: string | null = null;
+        if (toolInput) {
+          if (toolName === "Bash" && typeof toolInput.command === "string") {
+            detail = redactSecrets(toolInput.command);
+          } else if ((toolName === "Edit" || toolName === "Write") && typeof toolInput.file_path === "string") {
+            detail = toolInput.file_path;
+          } else if (toolName === "WebFetch" && typeof toolInput.url === "string") {
+            detail = toolInput.url;
+          } else if (typeof toolInput.command === "string") {
+            detail = redactSecrets(toolInput.command);
+          } else if (typeof toolInput.file_path === "string") {
+            detail = toolInput.file_path;
+          } else if (typeof toolInput.url === "string") {
+            detail = toolInput.url;
+          } else if (typeof toolInput.description === "string") {
+            detail = toolInput.description;
+          }
+        }
+
+        const risk = detail ? classifyRisk(detail) : null;
+
         upsertPermissionEvent(db, {
-          id: `perm-${workshopEvent.sessionId}-${workshopEvent.agentId}-${workshopEvent.timestamp}`,
+          id: permId,
           sessionId: workshopEvent.sessionId,
           agentId: workshopEvent.agentId,
-          toolName: null,
-          commandPreview: workshopEvent.target,
+          toolName,
+          commandPreview: detail ?? workshopEvent.target,
           requestedAt: workshopEvent.timestamp,
           decidedAt: null,
           decision: "pending",
           waitingDurationMs: null,
           requestType: "permission",
         });
+
+        // Broadcast enriched permission request
+        const permPayload: PermissionRequestPayload = {
+          id: permId,
+          sessionId: workshopEvent.sessionId,
+          agentId: workshopEvent.agentId,
+          agentName: workshopEvent.agentType ?? workshopEvent.agentId,
+          projectName: project.name,
+          branch: session.branch,
+          toolName,
+          detail,
+          message: (envelope as { message?: string }).message ?? null,
+          risk,
+          requestedAt: workshopEvent.timestamp,
+        };
+        hub.broadcast({ type: "permission_request", payload: permPayload });
       }
     }
-    // Resolve pending permission events: when a PreToolUse arrives for an agent
-    // that had a pending permission, it means the user approved. Likewise, if a
-    // Stop arrives with pending permissions, they were effectively cancelled.
-    if (workshopEvent.hookEventName === "PreToolUse" || workshopEvent.hookEventName === "Stop") {
+    // Resolve pending permission events: when a PreToolUse, PostToolUse,
+    // UserPromptSubmit, Stop, or SessionEnd arrives for an agent that had a
+    // pending permission, resolve it and dismiss the popup.
+    const resolveEvents = ["PreToolUse", "PostToolUse", "PostToolUseFailure", "UserPromptSubmit", "Stop", "SessionEnd"];
+    if (resolveEvents.includes(workshopEvent.hookEventName)) {
       const pending = getPendingPermissions(db);
       for (const perm of pending) {
         if (perm.sessionId === workshopEvent.sessionId && perm.agentId === workshopEvent.agentId) {
-          const decision = workshopEvent.hookEventName === "Stop" ? "cancelled" : "approved";
+          const decision = (workshopEvent.hookEventName === "Stop" || workshopEvent.hookEventName === "SessionEnd")
+            ? "cancelled"
+            : workshopEvent.hookEventName === "PostToolUseFailure" ? "denied" : "approved";
           const waitMs = Date.parse(workshopEvent.timestamp) - Date.parse(perm.requestedAt);
           upsertPermissionEvent(db, {
             ...perm,
@@ -290,6 +353,9 @@ export function buildApp({
             decision,
             waitingDurationMs: waitMs > 0 ? waitMs : null,
           });
+          // Broadcast dismissal
+          const resolvedPayload: PermissionResolvedPayload = { id: perm.id, sessionId: perm.sessionId, decision };
+          hub.broadcast({ type: "permission_resolved", payload: resolvedPayload });
         }
       }
     }
@@ -429,6 +495,10 @@ export function buildApp({
   });
 
   // ── Analytics API endpoints ──
+
+  // Track last PreToolUse per agent for enriching permission popups
+  // Key: "sessionId:agentId" → { toolName, toolInput, toolUseId }
+  const lastPreToolUse = new Map<string, { toolName: string; toolInput: unknown; toolUseId: string | null }>();
 
   // ── Transcript-based token tracking ──
   // Per-session transcript readers, keyed by session_id
