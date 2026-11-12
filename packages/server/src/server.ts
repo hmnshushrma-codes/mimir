@@ -54,6 +54,7 @@ import {
   readTranscriptIncremental,
   buildSummary,
   getContextLimit,
+  readSubagentTranscripts,
   type TranscriptReaderState,
   type SessionTokenSummary,
 } from "./transcript-reader.js";
@@ -465,6 +466,12 @@ export function buildApp({
       contextLimit: limit,
       contextUsagePercent: limit > 0 ? Math.round((s.latestContextTokens / limit) * 100) : null,
     };
+  });
+
+  app.get<{ Params: { id: string } }>("/analytics/tokens/:id/subagents", async (request) => {
+    const reader = transcriptReaders.get(request.params.id);
+    if (!reader) return [];
+    return readSubagentTranscripts(reader.path);
   });
 
   app.get("/analytics/sessions", async () => {

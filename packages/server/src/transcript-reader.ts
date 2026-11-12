@@ -13,7 +13,8 @@
  * deduped request, divided by a configurable model max.
  */
 
-import { readFileSync, statSync, existsSync, openSync, readSync, closeSync } from "node:fs";
+import { readFileSync, statSync, existsSync, openSync, readSync, closeSync, readdirSync } from "node:fs";
+import { join, dirname } from "node:path";
 
 // ─── Types ──────────────────────────────────────────────────────────
 
@@ -249,4 +250,76 @@ export function buildSummary(
     turnCount: state.turnCount,
     lastUpdated: new Date().toISOString(),
   };
+}
+
+// ─── Subagent transcript discovery ──────────────────────────────────
+
+export interface SubagentTokenSummary {
+  agentId: string;
+  model: string | null;
+  apiCalls: number;
+  inputTokens: number;
+  outputTokens: number;
+  cacheCreationTokens: number;
+  cacheReadTokens: number;
+}
+
+/**
+ * Discover and read subagent transcripts.
+ * Subagent transcripts live at: <transcript_dir>/<session_id>/subagents/agent-<id>.jsonl
+ * They use the same format as the main transcript.
+ */
+export function readSubagentTranscripts(mainTranscriptPath: string): SubagentTokenSummary[] {
+  const dir = dirname(mainTranscriptPath);
+  const sessionId = mainTranscriptPath.replace(/\.jsonl$/, "").split("/").pop() ?? "";
+  const subagentDir = join(dir, sessionId, "subagents");
+
+  if (!existsSync(subagentDir)) return [];
+
+  const results: SubagentTokenSummary[] = [];
+  let files: string[];
+  try {
+    files = readdirSync(subagentDir).filter((f) => f.startsWith("agent-") && f.endsWith(".jsonl"));
+  } catch {
+    return [];
+  }
+
+  for (const file of files) {
+    const agentId = file.replace("agent-", "").replace(".jsonl", "");
+    const filePath = join(subagentDir, file);
+    const state = createReaderState();
+    readTranscriptIncremental(filePath, state);
+
+    let inputTokens = 0;
+    let outputTokens = 0;
+    let cacheCreationTokens = 0;
+    let cacheReadTokens = 0;
+    const modelCounts = new Map<string, number>();
+
+    for (const entry of state.usageByRequestId.values()) {
+      inputTokens += entry.inputTokens;
+      outputTokens += entry.outputTokens;
+      cacheCreationTokens += entry.cacheCreationTokens;
+      cacheReadTokens += entry.cacheReadTokens;
+      modelCounts.set(entry.model, (modelCounts.get(entry.model) ?? 0) + 1);
+    }
+
+    let dominantModel: string | null = null;
+    let maxCount = 0;
+    for (const [model, count] of modelCounts) {
+      if (count > maxCount) { dominantModel = model; maxCount = count; }
+    }
+
+    results.push({
+      agentId,
+      model: dominantModel,
+      apiCalls: state.usageByRequestId.size,
+      inputTokens,
+      outputTokens,
+      cacheCreationTokens,
+      cacheReadTokens,
+    });
+  }
+
+  return results;
 }
