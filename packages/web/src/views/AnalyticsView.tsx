@@ -673,7 +673,7 @@ export function AnalyticsView() {
   return (
     <div className="analytics-view">
       <nav className="analytics-subtabs">
-        {(["overview", "tools", "permissions", "prompts"] as SubTab[]).map((t) => (
+        {(["overview", "tokens", "tools", "agents", "timeline", "compare", "permissions", "prompts"] as SubTab[]).map((t) => (
           <button key={t} className={`subtab ${subTab === t ? "active" : ""}`} onClick={() => setSubTab(t)}>
             {t.charAt(0).toUpperCase() + t.slice(1)}
           </button>
