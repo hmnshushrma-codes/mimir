@@ -8,7 +8,7 @@ import { WorkshopView } from "./views/WorkshopView.js";
 import { DashboardView } from "./views/DashboardView.js";
 import { AnalyticsView } from "./views/AnalyticsView.js";
 import { DemoControlBar } from "./components/DemoControlBar.js";
-import { PermissionToastContainer } from "./components/PermissionToast.js";
+import { PermissionToastContainer, PermissionBadge } from "./components/PermissionToast.js";
 import { isDemoMode, triggerDemoEvent } from "./data/demoSource.js";
 
 const API_BASE = window.location.origin;
@@ -102,6 +102,7 @@ export function App() {
             >
               Clear history
             </button>
+            <PermissionBadge />
             <ConnectionBadge status={status} />
           </>
         )}

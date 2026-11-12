@@ -90,9 +90,12 @@ function handleMessage(raw: MessageEvent<string>): void {
     case "permission_request":
       store.addPermissionRequest(message.payload);
       break;
-    case "permission_resolved":
-      store.resolvePermission(message.payload.id);
+    case "permission_resolved": {
+      const d = message.payload.decision;
+      const msg = d === "approved" ? "Allowed from dashboard" : d === "denied" ? "Denied from dashboard" : "Answered in terminal";
+      store.resolvePermission(message.payload.id, msg);
       break;
+    }
   }
 }
 
