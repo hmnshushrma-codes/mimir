@@ -5,7 +5,7 @@
 
 import { execSync } from "node:child_process";
 import { chmodSync, existsSync, lstatSync, mkdirSync, rmSync, symlinkSync } from "node:fs";
-import { dirname, join, resolve } from "node:path";
+import { delimiter, dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), "..");
@@ -42,6 +42,6 @@ try {
 }
 
 console.log(`✓ Linked ${link} -> ${target}`);
-if (!(process.env.PATH ?? "").split(":").includes(binDir)) {
+if (!(process.env.PATH ?? "").split(delimiter).includes(binDir)) {
   console.log(`  Note: ${binDir} is not on your PATH — add it to use \`mimir\` directly.`);
 }

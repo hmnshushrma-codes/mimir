@@ -206,11 +206,16 @@ async function cmdStart(demo: boolean): Promise<void> {
   └──────────────────────────────────────────┘
 `);
 
-  // Try to open browser
+  // Try to open browser (platform-safe, no shell interpolation)
   try {
-    const { exec } = await import("node:child_process");
-    const cmd = process.platform === "darwin" ? "open" : process.platform === "win32" ? "start" : "xdg-open";
-    exec(`${cmd} ${fullUrl}`);
+    const { spawn } = await import("node:child_process");
+    if (process.platform === "darwin") {
+      spawn("open", [fullUrl], { stdio: "ignore", detached: true }).unref();
+    } else if (process.platform === "win32") {
+      spawn("cmd", ["/c", "start", "", fullUrl], { stdio: "ignore", detached: true }).unref();
+    } else {
+      spawn("xdg-open", [fullUrl], { stdio: "ignore", detached: true }).unref();
+    }
   } catch {
     // Browser open failed — user can navigate manually
   }

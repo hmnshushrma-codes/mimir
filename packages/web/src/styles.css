@@ -188,13 +188,13 @@ body {
   background: var(--surface);
   border: 1px solid var(--border);
   border-radius: 999px;
-  padding: 2px 8px;
+  padding: 2px 10px;
   font-size: 10px;
   font-weight: 600;
   white-space: nowrap;
   z-index: 5;
   pointer-events: none;
-  max-width: 150px;
+  max-width: 280px;
   overflow: hidden;
   text-overflow: ellipsis;
 }
@@ -596,7 +596,6 @@ body {
   align-items: flex-start;
   gap: 4px;
   min-width: 0;
-  overflow: hidden;
 }
 
 .project-sign {
@@ -609,7 +608,6 @@ body {
   flex-wrap: wrap;
   gap: 16px;
   align-items: flex-start;
-  overflow: hidden;
 }
 
 .project-user-desk {

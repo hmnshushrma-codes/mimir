@@ -14,7 +14,7 @@
  */
 
 import { readFileSync, statSync, existsSync, openSync, readSync, closeSync, readdirSync } from "node:fs";
-import { join, dirname } from "node:path";
+import { join, dirname, basename } from "node:path";
 
 // ─── Types ──────────────────────────────────────────────────────────
 
@@ -271,7 +271,7 @@ export interface SubagentTokenSummary {
  */
 export function readSubagentTranscripts(mainTranscriptPath: string): SubagentTokenSummary[] {
   const dir = dirname(mainTranscriptPath);
-  const sessionId = mainTranscriptPath.replace(/\.jsonl$/, "").split("/").pop() ?? "";
+  const sessionId = basename(mainTranscriptPath, ".jsonl");
   const subagentDir = join(dir, sessionId, "subagents");
 
   if (!existsSync(subagentDir)) return [];
