@@ -1994,7 +1994,7 @@ body {
   to { opacity: 1; }
 }
 
-.perm-toast-header { display: flex; align-items: center; gap: 6px; margin-bottom: 8px; }
+.perm-toast-header { display: flex; align-items: center; gap: 6px; margin-bottom: 8px; position: relative; }
 .perm-toast-icon { font-size: 16px; }
 .perm-toast-title { font-weight: 700; font-size: 13px; flex: 1; }
 
@@ -2089,6 +2089,22 @@ body {
 .perm-queue-tool { font-weight: 600; }
 .perm-queue-detail { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--text-muted); font-family: monospace; font-size: 10px; }
 .perm-queue-time { color: var(--warn); font-size: 10px; white-space: nowrap; }
+
+/* Close/dismiss button */
+.perm-close-btn {
+  background: none;
+  border: none;
+  color: var(--text-muted);
+  font-size: 14px;
+  cursor: pointer;
+  padding: 2px 6px;
+  border-radius: 4px;
+  line-height: 1;
+  opacity: 0.5;
+  transition: opacity 0.15s, background 0.15s;
+}
+.perm-close-btn:hover { opacity: 1; background: var(--surface-alt); }
+.perm-close-sm { font-size: 11px; padding: 1px 4px; flex-shrink: 0; }
 
 /* Clickable mascot YES/NO signs */
 .sign-clickable { transition: transform 0.1s; }

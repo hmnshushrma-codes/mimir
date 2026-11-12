@@ -72,12 +72,13 @@ async function sendDecision(id: string, decision: "allow" | "deny", reason?: str
 
 // ── Active request detail card ──────────────────────────────
 
-function ActiveRequestCard({ perm, nowMs, onAllow, onDeny, onTerminal, remoteConnected }: {
+function ActiveRequestCard({ perm, nowMs, onAllow, onDeny, onTerminal, onDismiss, remoteConnected }: {
   perm: PermissionRequestPayload;
   nowMs: number;
   onAllow: () => void;
   onDeny: (reason?: string) => void;
   onTerminal: () => void;
+  onDismiss: () => void;
   remoteConnected: boolean;
 }) {
   const isDestructive = perm.risk === "destructive";
@@ -114,6 +115,7 @@ function ActiveRequestCard({ perm, nowMs, onAllow, onDeny, onTerminal, remoteCon
         <span className="perm-toast-icon">🖐</span>
         <span className="perm-toast-title">Permission Required</span>
         <RiskBadge risk={perm.risk} />
+        <button className="perm-close-btn" onClick={onDismiss} title="Dismiss (answer in terminal)">✕</button>
       </div>
 
       <div className="perm-toast-meta">
@@ -170,10 +172,11 @@ function ActiveRequestCard({ perm, nowMs, onAllow, onDeny, onTerminal, remoteCon
 
 // ── Queue item ──────────────────────────────────────────────
 
-function QueueItem({ perm, nowMs, onClick }: {
+function QueueItem({ perm, nowMs, onClick, onDismiss }: {
   perm: PermissionRequestPayload;
   nowMs: number;
   onClick: () => void;
+  onDismiss: () => void;
 }) {
   return (
     <div className="perm-queue-item" onClick={onClick}>
@@ -181,6 +184,7 @@ function QueueItem({ perm, nowMs, onClick }: {
       <span className="perm-queue-tool">{perm.toolName}</span>
       <span className="perm-queue-detail">{perm.detail?.slice(0, 40) ?? perm.message?.slice(0, 40) ?? ""}</span>
       <span className="perm-queue-time"><WaitingTimer since={perm.requestedAt} nowMs={nowMs} /></span>
+      <button className="perm-close-btn perm-close-sm" onClick={(e) => { e.stopPropagation(); onDismiss(); }} title="Dismiss">✕</button>
     </div>
   );
 }
@@ -247,6 +251,7 @@ export function PermissionToastContainer() {
           onAllow={handleAllow}
           onDeny={handleDeny}
           onTerminal={handleTerminal}
+          onDismiss={() => resolvePermission(active.id, "Dismissed")}
           remoteConnected={remoteConnected}
         />
       )}
@@ -255,7 +260,7 @@ export function PermissionToastContainer() {
         <div className="perm-queue">
           <div className="perm-queue-header">{queue.length} more pending</div>
           {queue.map((p) => (
-            <QueueItem key={p.id} perm={p} nowMs={nowMs} onClick={() => setActiveIndex(permissions.indexOf(p))} />
+            <QueueItem key={p.id} perm={p} nowMs={nowMs} onClick={() => setActiveIndex(permissions.indexOf(p))} onDismiss={() => resolvePermission(p.id, "Dismissed")} />
           ))}
         </div>
       )}
