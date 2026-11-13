@@ -12,13 +12,38 @@ import { PermissionToastContainer, PermissionBadge } from "./components/Permissi
 import { isDemoMode, triggerDemoEvent } from "./data/demoSource.js";
 
 const API_BASE = window.location.origin;
-
-type Tab = "workshop" | "dashboard" | "analytics" | "debug";
-
 const BASE_TITLE = "Mimir";
+const VIEW_STORAGE_KEY = "mimir:view:v1";
+
+// ── URL-based routing ──────────────────────────────────────
+
+type ViewMode = "workshop" | "data" | "split" | "debug";
+
+const VALID_VIEWS: ViewMode[] = ["workshop", "data", "split", "debug"];
+
+function readViewFromURL(): ViewMode {
+  const params = new URLSearchParams(window.location.search);
+  const v = params.get("view");
+  if (v && VALID_VIEWS.includes(v as ViewMode)) return v as ViewMode;
+  // Fallback to localStorage
+  try {
+    const stored = localStorage.getItem(VIEW_STORAGE_KEY);
+    if (stored && VALID_VIEWS.includes(stored as ViewMode)) return stored as ViewMode;
+  } catch { /* ignore */ }
+  return "workshop";
+}
+
+function pushView(view: ViewMode): void {
+  const url = new URL(window.location.href);
+  url.searchParams.set("view", view);
+  window.history.pushState({ view }, "", url.toString());
+  try { localStorage.setItem(VIEW_STORAGE_KEY, view); } catch { /* ignore */ }
+}
+
+// ── App ────────────────────────────────────────────────────
 
 export function App() {
-  const [tab, setTab] = useState<Tab>("workshop");
+  const [view, setViewState] = useState<ViewMode>(readViewFromURL);
   const [showSplash, setShowSplash] = useState(true);
   const hideSplash = useCallback(() => setShowSplash(false), []);
   const status = useWorkshopStore((s) => s.status);
@@ -27,26 +52,48 @@ export function App() {
   const setFocusedSession = useWorkshopStore((s) => s.setFocusedSession);
   const debugOverlayEnabled = useWorkshopStore((s) => s.debugOverlayEnabled);
   const toggleDebugOverlay = useWorkshopStore((s) => s.toggleDebugOverlay);
+
+  const setView = useCallback((v: ViewMode) => {
+    setViewState(v);
+    pushView(v);
+  }, []);
+
+  // Sync with browser back/forward
+  useEffect(() => {
+    function onPopState(e: PopStateEvent) {
+      const v = e.state?.view ?? readViewFromURL();
+      setViewState(v);
+    }
+    window.addEventListener("popstate", onPopState);
+    return () => window.removeEventListener("popstate", onPopState);
+  }, []);
+
+  // Set initial URL if not present
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    if (!params.has("view")) {
+      const url = new URL(window.location.href);
+      url.searchParams.set("view", view);
+      window.history.replaceState({ view }, "", url.toString());
+    }
+  }, []);
+
   const openProjectInWorkshop = useCallback(
     (projectId: string) => {
       setProjectFilter(projectId);
-      setTab("workshop");
+      setView("workshop");
     },
-    [setProjectFilter]
+    [setProjectFilter, setView]
   );
   const openSessionInWorkshop = useCallback(
     (sessionId: string) => {
       setFocusedSession(sessionId);
-      setTab("workshop");
+      setView("workshop");
     },
-    [setFocusedSession]
+    [setFocusedSession, setView]
   );
-  // Object.values(sessionsById) inside the selector itself would return a
-  // new array every call, which trips React's "getSnapshot should be
-  // cached" infinite-loop guard. Derive it here instead, memoized on the
-  // (stable-until-mutated) sessionsById reference.
-  const sessions = useMemo(() => Object.values(sessionsById), [sessionsById]);
 
+  const sessions = useMemo(() => Object.values(sessionsById), [sessionsById]);
   const waitingForPermissionCount = useMemo(
     () => sessions.reduce((count, session) => count + session.agents.filter((a) => a.displayState === "needs_permission").length, 0),
     [sessions]
@@ -63,20 +110,20 @@ export function App() {
       {showSplash && <SplashScreen onComplete={hideSplash} />}
       <header className="app-header">
         <span className="app-title">Mimir</span>
-        <nav className="tabs">
-          <button className={`tab-button ${tab === "workshop" ? "active" : ""}`} onClick={() => setTab("workshop")}>
+
+        {/* Segmented view switch */}
+        <div className="view-switch">
+          <button className={`view-switch-btn ${view === "workshop" ? "active" : ""}`} onClick={() => setView("workshop")}>
             Workshop
           </button>
-          <button className={`tab-button ${tab === "dashboard" ? "active" : ""}`} onClick={() => setTab("dashboard")}>
-            Dashboard
+          <button className={`view-switch-btn ${view === "data" ? "active" : ""}`} onClick={() => setView("data")}>
+            Data
           </button>
-          <button className={`tab-button ${tab === "analytics" ? "active" : ""}`} onClick={() => setTab("analytics")}>
-            Analytics
+          <button className={`view-switch-btn ${view === "split" ? "active" : ""}`} onClick={() => setView("split")}>
+            Split
           </button>
-          <button className={`tab-button ${tab === "debug" ? "active" : ""}`} onClick={() => setTab("debug")}>
-            Debug
-          </button>
-        </nav>
+        </div>
+
         <span className="spacer" />
         <a className="docs-link" href="/docs.html" target="_blank" rel="noopener">
           Docs
@@ -106,18 +153,57 @@ export function App() {
             <ConnectionBadge status={status} />
           </>
         )}
+
+        {/* Debug tab — small, separate from main view switch */}
+        {!isDemoMode() && (
+          <button
+            className={`tab-button tab-debug ${view === "debug" ? "active" : ""}`}
+            onClick={() => setView("debug")}
+            title="Debug event feed"
+          >
+            Debug
+          </button>
+        )}
       </header>
 
       {isDemoMode() && <DemoControlBar onTrigger={triggerDemoEvent} />}
 
       <main className="main-content">
-        {tab === "workshop" && <WorkshopView />}
-        {tab === "dashboard" && <DashboardView onOpenProject={openProjectInWorkshop} onOpenSession={openSessionInWorkshop} />}
-        {tab === "analytics" && <AnalyticsView />}
-        {tab === "debug" && <DebugView />}
+        {view === "workshop" && <WorkshopView />}
+        {view === "data" && <AnalyticsView />}
+        {view === "split" && (
+          <div className="split-view">
+            <div className="split-workshop">
+              <WorkshopView />
+            </div>
+            <div className="split-data">
+              <SplitStripPlaceholder />
+            </div>
+          </div>
+        )}
+        {view === "debug" && <DebugView />}
       </main>
 
       <PermissionToastContainer />
+    </div>
+  );
+}
+
+/** Placeholder for the split-mode KPI strip — will be replaced with real data */
+function SplitStripPlaceholder() {
+  return (
+    <div className="split-strip">
+      <div className="split-strip-cards">
+        <div className="split-kpi"><span className="split-kpi-value">—</span><span className="split-kpi-label">Agents</span></div>
+        <div className="split-kpi"><span className="split-kpi-value">—</span><span className="split-kpi-label">Tools</span></div>
+        <div className="split-kpi"><span className="split-kpi-value">—</span><span className="split-kpi-label">Tokens</span></div>
+        <div className="split-kpi"><span className="split-kpi-value">—</span><span className="split-kpi-label">Cost</span></div>
+        <div className="split-kpi"><span className="split-kpi-value">—</span><span className="split-kpi-label">Success</span></div>
+        <div className="split-kpi"><span className="split-kpi-value">—</span><span className="split-kpi-label">Perms</span></div>
+      </div>
+      <div className="split-ticker">
+        <span className="split-ticker-item">Waiting for events...</span>
+      </div>
     </div>
   );
 }
