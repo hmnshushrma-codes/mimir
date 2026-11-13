@@ -217,6 +217,20 @@ body {
   color: var(--accent);
 }
 
+.header-toggle {
+  font-family: inherit;
+  font-size: 12px;
+  padding: 4px 10px;
+  border-radius: 6px;
+  border: 1px solid var(--border);
+  background: transparent;
+  color: var(--text-muted);
+  cursor: pointer;
+  transition: all 0.15s;
+}
+.header-toggle:hover { color: var(--text); border-color: var(--accent); }
+.header-toggle.on { background: var(--accent); color: #fff; border-color: var(--accent); }
+
 .spacer {
   flex: 1;
 }
