@@ -49,7 +49,7 @@ const INSTALL_PATH_SUFFIX = ".claude/agent-workshop/hook-runner.mjs";
 function isOurHandler(handler: HookHandler): boolean {
   if (handler.type !== "command") return false;
   const cmd = handler.command ?? "";
-  // Match both old format (command: "node", args: [path]) and new (command: "node path")
+  // Match both old format (command: "node", args: [path]) and new (command: "/abs/node /abs/path")
   if (handler.command === "node" && handler.args?.[0]) {
     return handler.args[0].replace(/\\/g, "/").endsWith(INSTALL_PATH_SUFFIX);
   }
@@ -57,11 +57,12 @@ function isOurHandler(handler: HookHandler): boolean {
 }
 
 function ourHandler(hookScriptPath: string): HookHandler {
-  // Use the exec-form `args` array (spawned directly, no shell) rather than a
-  // single command string — on Windows, hook commands run through Git Bash by
-  // default, which treats backslashes as escape characters and mangles
-  // Windows-style paths like C:\Users\...\hook-runner.mjs.
-  return { type: "command", command: "node", args: [hookScriptPath], timeout: 1 };
+  // Use a single command string with the absolute node path. The split
+  // command+args form can fail: if Claude Code drops args, bare `node` runs
+  // and evaluates stdin JSON as code (SyntaxError). A single command string
+  // avoids that entirely.
+  const nodeBin = process.execPath; // absolute path to current node binary
+  return { type: "command", command: `${nodeBin} ${hookScriptPath}`, timeout: 1 };
 }
 
 export interface InstalledHookEntry {
@@ -173,7 +174,8 @@ function isOurPermHandler(handler: HookHandler): boolean {
 }
 
 function ourPermHandler(hookScriptPath: string): HookHandler {
-  return { type: "command", command: "node", args: [hookScriptPath], timeout: 130 };
+  const nodeBin = process.execPath;
+  return { type: "command", command: `${nodeBin} ${hookScriptPath}`, timeout: 130 };
 }
 
 /** Install the PermissionRequest hook. Does NOT touch existing hooks. */
