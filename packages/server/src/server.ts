@@ -320,7 +320,7 @@ export function buildApp({
           requestType: "permission",
         });
 
-        // Broadcast enriched permission request
+        // Broadcast enriched permission request (Phase A — info only, no hook waiting)
         const permPayload: PermissionRequestPayload = {
           id: permId,
           sessionId: workshopEvent.sessionId,
@@ -333,6 +333,7 @@ export function buildApp({
           message: (envelope as { message?: string }).message ?? null,
           risk,
           requestedAt: workshopEvent.timestamp,
+          hookConnected: false,
         };
         hub.broadcast({ type: "permission_request", payload: permPayload });
       }
@@ -622,10 +623,11 @@ export function buildApp({
       });
 
       if (!existing) {
-        // Broadcast to browser
+        // Broadcast to browser (Phase B — hook is waiting, show action buttons)
         const pending = permManager.get(id);
         if (pending) {
-          hub.broadcast({ type: "permission_request", payload: permManager.serialize(pending) as unknown as PermissionRequestPayload });
+          const payload = { ...permManager.serialize(pending), hookConnected: true } as unknown as PermissionRequestPayload;
+          hub.broadcast({ type: "permission_request", payload });
         }
       }
 

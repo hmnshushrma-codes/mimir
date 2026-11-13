@@ -96,9 +96,9 @@ function ActiveRequestCard({ perm, nowMs, onAllow, onDeny, onTerminal, onDismiss
 
   useEffect(() => () => { if (confirmTimer.current) clearTimeout(confirmTimer.current); }, []);
 
-  // Keyboard shortcuts (Y/N) only when not destructive and remote connected
+  // Keyboard shortcuts (Y/N) only when not destructive and hook is connected
   useEffect(() => {
-    if (!remoteConnected) return;
+    if (!perm.hookConnected) return;
     function onKey(e: KeyboardEvent) {
       if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement) return;
       if (isDestructive) return;
@@ -143,11 +143,11 @@ function ActiveRequestCard({ perm, nowMs, onAllow, onDeny, onTerminal, onDismiss
           Waiting <WaitingTimer since={perm.requestedAt} nowMs={nowMs} />
         </span>
         <span className="perm-toast-hint">
-          {remoteConnected ? "Waiting for you (dashboard or terminal)" : "Answer in your terminal"}
+          {perm.hookConnected ? "Waiting for you (dashboard or terminal)" : "Answer in your terminal"}
         </span>
       </div>
 
-      {remoteConnected && (
+      {perm.hookConnected && (
         <div className="perm-actions">
           <button
             className={`perm-btn perm-btn-deny ${isDestructive ? "perm-btn-default" : ""}`}

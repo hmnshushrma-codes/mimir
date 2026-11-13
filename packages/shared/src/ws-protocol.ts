@@ -22,6 +22,9 @@ export interface PermissionRequestPayload {
   message: string | null;
   risk: RiskLevel;
   requestedAt: string;
+  /** True when a PermissionRequest hook is waiting for this decision (Phase B).
+   *  False when this is just a notification (Phase A info-only). */
+  hookConnected?: boolean;
 }
 
 /** Fired when a permission request is resolved (approved/denied/cancelled). */

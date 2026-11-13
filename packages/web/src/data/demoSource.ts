@@ -80,6 +80,7 @@ export function triggerDemoEvent(type: string): void {
         message: s.msg,
         risk: detail ? classifyRisk(detail) : null,
         requestedAt: now,
+        hookConnected: true, // Demo mode simulates Phase B
       };
       // Defer so the model event processes first
       setTimeout(() => useWorkshopStore.getState().addPermissionRequest(permPayload), 10);
