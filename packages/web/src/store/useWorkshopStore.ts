@@ -48,6 +48,10 @@ interface WorkshopStoreState {
   promptHistory: Record<string, PromptEntry[]>;
   /** Pending permission requests (queue, ordered by time) */
   pendingPermissions: PermissionRequestPayload[];
+  /** Brief resolved messages: id → "Allowed from dashboard" etc. Auto-clears. */
+  resolvedMessages: Record<string, string>;
+  /** Whether remote approval is connected (hook is installed and server has token). */
+  remoteApprovalConnected: boolean;
   debugOverlayEnabled: boolean;
   setStatus: (status: ConnectionStatus) => void;
   applySnapshot: (payload: { projects: SerializedProject[]; sessions: SerializedSession[] }) => void;
@@ -64,7 +68,8 @@ interface WorkshopStoreState {
    *  the event feed for sessions that were already running. */
   backfillTimeline: (events: WorkshopEvent[]) => void;
   addPermissionRequest: (perm: PermissionRequestPayload) => void;
-  resolvePermission: (id: string) => void;
+  resolvePermission: (id: string, message?: string) => void;
+  setRemoteApproval: (connected: boolean) => void;
 }
 
 const MAX_TIMELINE_ENTRIES = 500;
@@ -86,6 +91,8 @@ export const useWorkshopStore = create<WorkshopStoreState>((set, get) => ({
   timeline: [],
   promptHistory: {},
   pendingPermissions: [],
+  resolvedMessages: {},
+  remoteApprovalConnected: false,
   debugOverlayEnabled: loadDebugOverlayEnabled(),
 
   setStatus: (status) => set({ status }),
@@ -192,9 +199,23 @@ export const useWorkshopStore = create<WorkshopStoreState>((set, get) => ({
     }));
   },
 
-  resolvePermission: (id) => {
-    set((state) => ({
-      pendingPermissions: state.pendingPermissions.filter((p) => p.id !== id),
-    }));
+  resolvePermission: (id, message) => {
+    set((state) => {
+      const resolved = message ? { ...state.resolvedMessages, [id]: message } : state.resolvedMessages;
+      // Auto-clear resolved message after 3s
+      if (message) setTimeout(() => {
+        useWorkshopStore.setState((s) => {
+          const next = { ...s.resolvedMessages };
+          delete next[id];
+          return { resolvedMessages: next };
+        });
+      }, 3000);
+      return {
+        pendingPermissions: state.pendingPermissions.filter((p) => p.id !== id),
+        resolvedMessages: resolved,
+      };
+    });
   },
+
+  setRemoteApproval: (connected) => set({ remoteApprovalConnected: connected }),
 }));

@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useCallback, useState } from "react";
 import type { SerializedAgent, ActionCategory } from "@agent-workshop/shared";
 import { RiggedCharacter } from "../rig/RiggedCharacter.js";
 import { useStableBehaviour } from "../rig/useStableBehaviour.js";
@@ -8,8 +8,8 @@ import type { PropsConfig } from "../rig/types.js";
 import { usePrefersDarkMode } from "../hooks/usePrefersDarkMode.js";
 import { useIsDaytime } from "../hooks/useTimeOfDay.js";
 import { AgentTooltip } from "./AgentTooltip.js";
-import { StateLabel } from "./StateLabel.js";
 import { useWorkshopStore } from "../store/useWorkshopStore.js";
+import { StateLabel } from "./StateLabel.js";
 
 const INK = "#1b1d23";
 
@@ -118,11 +118,13 @@ export interface ForemanDeskProps {
   selected: boolean;
   onSelect: () => void;
   reducedMotion: boolean;
+  onSignYes?: () => void;
+  onSignNo?: () => void;
 }
 
 export function ForemanDesk({
   agent, teamColor, projectName, branch, latestPrompt, nowMs,
-  selected, onSelect, reducedMotion
+  selected, onSelect, reducedMotion, onSignYes, onSignNo,
 }: ForemanDeskProps) {
   const [hovered, setHovered] = useState(false);
   const isDark = usePrefersDarkMode();
@@ -246,15 +248,23 @@ export function ForemanDesk({
         {needsPermission && (
           <>
             {behaviour.props.signs?.yes && (
-              <g transform="translate(46, 122)">
+              <g transform="translate(46, 122)"
+                onClick={(e) => { e.stopPropagation(); onSignYes?.(); }}
+                style={{ cursor: onSignYes ? "pointer" : "default" }}
+                className={onSignYes ? "sign-clickable" : ""}
+              >
                 <rect x="0" y="0" width="26" height="14" rx="3" fill="#1baf7a" stroke="#fff" strokeWidth="1" />
-                <text x="13" y="11" textAnchor="middle" fontSize="8" fontWeight="700" fill="#fff">YES</text>
+                <text x="13" y="11" textAnchor="middle" fontSize="8" fontWeight="700" fill="#fff" style={{ pointerEvents: "none" }}>YES</text>
               </g>
             )}
             {behaviour.props.signs?.no && (
-              <g transform="translate(128, 122)">
+              <g transform="translate(128, 122)"
+                onClick={(e) => { e.stopPropagation(); onSignNo?.(); }}
+                style={{ cursor: onSignNo ? "pointer" : "default" }}
+                className={onSignNo ? "sign-clickable" : ""}
+              >
                 <rect x="0" y="0" width="26" height="14" rx="3" fill="#e34948" stroke="#fff" strokeWidth="1" />
-                <text x="13" y="11" textAnchor="middle" fontSize="8" fontWeight="700" fill="#fff">NO</text>
+                <text x="13" y="11" textAnchor="middle" fontSize="8" fontWeight="700" fill="#fff" style={{ pointerEvents: "none" }}>NO</text>
               </g>
             )}
           </>

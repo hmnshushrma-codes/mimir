@@ -159,6 +159,65 @@ export function shouldRemoveScript(
  * exactly what it would have looked like had we never installed, apart from
  * whatever else changed in the meantime.
  */
+// ── PermissionRequest hook for remote approval ──
+
+const PERM_HOOK_PATH_SUFFIX = ".claude/agent-workshop/perm-hook.mjs";
+
+function isOurPermHandler(handler: HookHandler): boolean {
+  if (handler.type !== "command") return false;
+  const cmd = handler.command ?? "";
+  if (handler.command === "node" && handler.args?.[0]) {
+    return handler.args[0].replace(/\\/g, "/").endsWith(PERM_HOOK_PATH_SUFFIX);
+  }
+  return cmd.replace(/\\/g, "/").includes(PERM_HOOK_PATH_SUFFIX);
+}
+
+function ourPermHandler(hookScriptPath: string): HookHandler {
+  return { type: "command", command: "node", args: [hookScriptPath], timeout: 130 };
+}
+
+/** Install the PermissionRequest hook. Does NOT touch existing hooks. */
+export function installPermHook(settings: ClaudeSettings, hookScriptPath: string): ClaudeSettings {
+  const nextHooks: HooksSection = { ...(settings.hooks ?? {}) };
+
+  const existingGroups = nextHooks["PermissionRequest"] ?? [];
+  // Remove any existing perm hook of ours
+  const withoutOurs = existingGroups
+    .map((group) => ({ ...group, hooks: group.hooks.filter((h) => !isOurPermHandler(h)) }))
+    .filter((group) => group.hooks.length > 0);
+  nextHooks["PermissionRequest"] = [...withoutOurs, { matcher: "", hooks: [ourPermHandler(hookScriptPath)] }];
+
+  return { ...settings, hooks: nextHooks };
+}
+
+/** Uninstall the PermissionRequest hook. Does NOT touch other hooks. */
+export function uninstallPermHook(settings: ClaudeSettings): ClaudeSettings {
+  if (!settings.hooks?.PermissionRequest) return { ...settings };
+
+  const nextHooks: HooksSection = { ...settings.hooks };
+  const filtered = (nextHooks["PermissionRequest"] ?? [])
+    .map((group) => ({ ...group, hooks: group.hooks.filter((h) => !isOurPermHandler(h)) }))
+    .filter((group) => group.hooks.length > 0);
+
+  if (filtered.length > 0) {
+    nextHooks["PermissionRequest"] = filtered;
+  } else {
+    delete nextHooks["PermissionRequest"];
+  }
+
+  const next: ClaudeSettings = { ...settings, hooks: nextHooks };
+  if (Object.keys(nextHooks).length === 0) delete next.hooks;
+  return next;
+}
+
+/** Check if PermissionRequest hook is installed. */
+export function isPermHookInstalled(settings: ClaudeSettings): boolean {
+  for (const group of settings.hooks?.PermissionRequest ?? []) {
+    if (group.hooks.some((h) => isOurPermHandler(h))) return true;
+  }
+  return false;
+}
+
 export function uninstallHooks(settings: ClaudeSettings): ClaudeSettings {
   if (!settings.hooks) return { ...settings };
 

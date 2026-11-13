@@ -278,13 +278,28 @@ mimir start             <span class="c"># Start the visualization</span></code><
             <img src="/screenshots/analytics.png" alt="The Analytics overview: totals for sessions, agents, tool calls, failures, permissions, and time, with a per-session table" width="1280" height="440" loading="lazy" />
             <figcaption>Analytics overview: sessions, agents, tool calls, failures, permissions, and total time.</figcaption>
           </figure>
+
+          <h3>Token &amp; cost intelligence</h3>
+          <figure>
+            <img src="/screenshots/tokens.png" alt="Tokens tab: conversations, AI responses, words written, memory gauge, cost breakdown" width="1280" height="700" loading="lazy" />
+            <figcaption>Token dashboard: conversations, AI responses, words written, memory usage, and cost breakdown in plain English.</figcaption>
+          </figure>
+          <p>The Tokens tab reads Claude Code transcript files and shows usage in terms anyone can understand — conversations, words, and memory percentage instead of raw token counts. Cost estimates are clearly labeled as API-equivalent (not your actual bill on Pro/Max plans).</p>
+
+          <h3>Permission approval</h3>
+          <figure>
+            <img src="/screenshots/permission.png" alt="Permission popup: destructive command with Allow/Deny buttons and mascot YES/NO signs" width="1280" height="800" loading="lazy" />
+            <figcaption>Approve or deny Claude Code permission requests from the browser. Destructive commands are flagged and require a second confirmation click.</figcaption>
+          </figure>
+          <p>When Claude Code asks for permission, a docked panel shows the full command, file, or URL being requested. Click Allow, Deny, or decide in the terminal — first answer wins. Destructive commands (rm -rf, force push, drop table) are highlighted and require double-confirm. The mascot's YES/NO signs are also clickable.</p>
+
           <div class="cards">
             <div class="card"><h4>Tool analytics</h4><p>Most-used tools, success and failure rates, average duration, retries.</p></div>
-            <div class="card"><h4>Tokens &amp; cost</h4><p>Token usage from Claude Code transcripts (opt-in), priced for Opus, Sonnet, and Haiku.</p></div>
-            <div class="card"><h4>Waste detection</h4><p>Repeated tool calls, redundant file reads, and failed retries, with confidence levels.</p></div>
+            <div class="card"><h4>Tokens &amp; cost</h4><p>Plain-English token dashboard with memory gauge, cost breakdown, and savings tips.</p></div>
+            <div class="card"><h4>Permission approval</h4><p>Remote allow/deny from the browser with risk tags, secret redaction, and audit log.</p></div>
             <div class="card"><h4>Prompt quality</h4><p>A 10-dimension score for each prompt, with suggestions to improve it.</p></div>
             <div class="card"><h4>Knowledge</h4><p>CLAUDE.md detection, frequently accessed files, and gaps worth documenting.</p></div>
-            <div class="card"><h4>Permissions</h4><p>Every request from pending to approved or cancelled, with how long it waited.</p></div>
+            <div class="card"><h4>Permissions history</h4><p>Every request from pending to approved or cancelled, with how long it waited.</p></div>
           </div>
         </section>
 
