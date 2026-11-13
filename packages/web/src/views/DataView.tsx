@@ -727,27 +727,575 @@ function OverviewPage({
   );
 }
 
-// ── Placeholder page for non-Overview tabs ──────────────────────────
+// ── Sessions Page ──────────────────────────────────────────────────
 
-function PlaceholderPage({ page }: { page: string }) {
+function SessionsPage({
+  sessions,
+  projects,
+  tokenData,
+}: {
+  sessions: Record<string, import("@agent-workshop/shared").SerializedSession>;
+  projects: Record<string, import("@agent-workshop/shared").SerializedProject>;
+  tokenData: TokenBucket[];
+}) {
+  const [search, setSearch] = useState("");
+  const [sortCol, setSortCol] = useState<string>("Started");
+  const [sortAsc, setSortAsc] = useState(false);
+
+  const rows = useMemo((): SessionRow[] => {
+    return Object.values(sessions).map((s) => {
+      const proj = projects[s.projectId];
+      const totalTools = s.agents.reduce((sum, a) => sum + a.activeToolCalls.length + a.finishedToolCalls.length, 0);
+      const failedTools = s.agents.reduce((sum, a) => sum + a.finishedToolCalls.filter((tc) => tc.status === "failed").length, 0);
+      const durationMs = Date.parse(s.lastEventAt) - Date.parse(s.startedAt);
+      const td = tokenData.find((t) => t.sessionId === s.id);
+      const tokens = td ? (td.inputTokens ?? 0) + (td.outputTokens ?? 0) + (td.cacheReadTokens ?? 0) + (td.cacheCreationTokens ?? 0) : 0;
+      const cost = td ? ((td.inputTokens ?? 0) / 1e6) * 3 + ((td.outputTokens ?? 0) / 1e6) * 15 : 0;
+      return {
+        id: s.id,
+        projectName: proj?.name ?? s.projectId.slice(0, 12),
+        status: s.status as "active" | "idle" | "ended",
+        startedAt: s.startedAt,
+        durationMs: Math.max(durationMs, 0),
+        toolCalls: totalTools,
+        failedCalls: failedTools,
+        tokens,
+        cost,
+        _agents: s.agents.length,
+      } as SessionRow & { _agents: number };
+    });
+  }, [sessions, projects, tokenData]);
+
+  const filtered = useMemo(() => {
+    const q = search.toLowerCase();
+    let list = q ? rows.filter((r) => r.projectName.toLowerCase().includes(q) || r.id.includes(q)) : rows;
+    const col = sortCol;
+    list = [...list].sort((a, b) => {
+      let cmp = 0;
+      if (col === "Project") cmp = a.projectName.localeCompare(b.projectName);
+      else if (col === "Status") cmp = a.status.localeCompare(b.status);
+      else if (col === "Started") cmp = Date.parse(a.startedAt) - Date.parse(b.startedAt);
+      else if (col === "Duration") cmp = a.durationMs - b.durationMs;
+      else if (col === "Agents") cmp = ((a as any)._agents ?? 0) - ((b as any)._agents ?? 0);
+      else if (col === "Tools") cmp = a.toolCalls - b.toolCalls;
+      else if (col === "Failed") cmp = a.failedCalls - b.failedCalls;
+      else if (col === "Tokens") cmp = a.tokens - b.tokens;
+      else if (col === "Cost") cmp = a.cost - b.cost;
+      return sortAsc ? cmp : -cmp;
+    });
+    return list;
+  }, [rows, search, sortCol, sortAsc]);
+
+  const handleSort = (col: string) => {
+    if (sortCol === col) setSortAsc(!sortAsc);
+    else { setSortCol(col); setSortAsc(false); }
+  };
+
+  const cols = ["Project", "Status", "Started", "Duration", "Agents", "Tools", "Failed", "Tokens", "Cost"];
+  const rightCols = new Set(["Duration", "Agents", "Tools", "Failed", "Tokens", "Cost"]);
+
   return (
-    <div
-      style={{
-        display: "flex",
-        alignItems: "center",
-        justifyContent: "center",
-        height: 300,
-        background: "var(--dv-bg-card)",
-        border: "1px solid var(--dv-border)",
-        borderRadius: "var(--dv-radius-card)",
-        color: "var(--dv-text-secondary)",
-        fontSize: 16,
-      }}
-    >
-      {page.charAt(0).toUpperCase() + page.slice(1)} — Coming soon
+    <div style={{ display: "flex", flexDirection: "column", gap: "var(--dv-space-md)" }}>
+      <input
+        placeholder="Search sessions..."
+        value={search}
+        onChange={(e) => setSearch(e.target.value)}
+        style={{ padding: "8px 12px", background: "var(--dv-bg-card)", border: "1px solid var(--dv-border)", borderRadius: "var(--dv-radius-btn)", color: "var(--dv-text)", fontSize: 13, fontFamily: "var(--dv-font)", maxWidth: 320 }}
+      />
+      <div style={chartContainerStyle}>
+        <span style={chartTitleStyle}>All Sessions ({filtered.length})</span>
+        <div style={{ overflowX: "auto" }}>
+          <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 13 }}>
+            <thead>
+              <tr>
+                {cols.map((h) => (
+                  <th key={h} onClick={() => handleSort(h)} style={{ ...thStyle, textAlign: rightCols.has(h) ? "right" : "left", cursor: "pointer" }}>
+                    {h}{sortCol === h ? (sortAsc ? " ▲" : " ▼") : ""}
+                  </th>
+                ))}
+              </tr>
+            </thead>
+            <tbody>
+              {filtered.map((r) => {
+                const dot = statusDot(r.status);
+                return (
+                  <tr key={r.id} style={{ borderBottom: "1px solid var(--dv-border)" }}>
+                    <td style={cellStyle}>{r.projectName}</td>
+                    <td style={cellStyle}>
+                      <span style={{ display: "inline-flex", alignItems: "center", gap: 6 }}>
+                        <span style={{ width: 8, height: 8, borderRadius: "50%", background: dot.color, display: "inline-block" }} />
+                        {dot.label}
+                      </span>
+                    </td>
+                    <td style={cellStyle}>{relativeTime(r.startedAt)}</td>
+                    <td style={cellStyleRight}>{fmtDuration(r.durationMs)}</td>
+                    <td style={cellStyleRight}>{(r as any)._agents ?? 0}</td>
+                    <td style={cellStyleRight}>{r.toolCalls}</td>
+                    <td style={{ ...cellStyleRight, color: r.failedCalls > 0 ? "var(--dv-red)" : undefined }}>{r.failedCalls}</td>
+                    <td style={cellStyleRight}>{fmtNum(r.tokens)}</td>
+                    <td style={{ ...cellStyleRight, color: "var(--dv-amber)" }}>{fmtCost(r.cost)}</td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+          {filtered.length === 0 && <div style={{ padding: 24, color: "var(--dv-text-secondary)", textAlign: "center" }}>No sessions found</div>}
+        </div>
+      </div>
     </div>
   );
 }
+
+// ── Tools Page ─────────────────────────────────────────────────────
+
+interface ToolSummary {
+  toolName: string;
+  category: string;
+  totalCalls: number;
+  successCount: number;
+  failureCount: number;
+  retryCount: number;
+  avgDurationMs: number | null;
+  maxDurationMs: number | null;
+}
+
+function ToolsPage() {
+  const [data, setData] = useState<ToolSummary[]>([]);
+  useEffect(() => {
+    fetch(`${API}/analytics/tools/summary`).then((r) => r.ok ? r.json() : []).then(setData).catch(() => {});
+  }, []);
+
+  const top5 = useMemo(() => data.slice(0, 5), [data]);
+  const maxCalls = Math.max(...top5.map((d) => d.totalCalls), 1);
+
+  return (
+    <div style={{ display: "flex", flexDirection: "column", gap: "var(--dv-space-md)" }}>
+      {top5.length > 0 && (
+        <div style={chartContainerStyle}>
+          <span style={chartTitleStyle}>Top 5 Tools</span>
+          <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+            {top5.map((t) => (
+              <div key={t.toolName} style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                <span style={{ width: 100, fontSize: 12, color: "var(--dv-text)", textAlign: "right", flexShrink: 0 }}>{t.toolName}</span>
+                <div style={{ flex: 1, height: 20, background: "var(--dv-border)", borderRadius: 4, overflow: "hidden" }}>
+                  <div style={{ width: `${(t.totalCalls / maxCalls) * 100}%`, height: "100%", background: "var(--dv-green)", borderRadius: 4, opacity: 0.85 }} />
+                </div>
+                <span style={{ width: 50, fontSize: 12, fontFamily: "var(--dv-font-mono)", color: "var(--dv-text-secondary)" }}>{fmtNum(t.totalCalls)}</span>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+      <div style={chartContainerStyle}>
+        <span style={chartTitleStyle}>Tool Usage ({data.length} tools)</span>
+        <div style={{ overflowX: "auto" }}>
+          <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 13 }}>
+            <thead>
+              <tr>
+                {["Tool", "Category", "Calls", "Success", "Failed", "Retries", "Avg Duration", "Max Duration"].map((h) => (
+                  <th key={h} style={{ ...thStyle, textAlign: h === "Tool" || h === "Category" ? "left" : "right" }}>{h}</th>
+                ))}
+              </tr>
+            </thead>
+            <tbody>
+              {data.map((t) => (
+                <tr key={t.toolName} style={{ borderBottom: "1px solid var(--dv-border)" }}>
+                  <td style={cellStyle}>{t.toolName}</td>
+                  <td style={{ ...cellStyle, color: "var(--dv-text-secondary)" }}>{t.category}</td>
+                  <td style={cellStyleRight}>{fmtNum(t.totalCalls)}</td>
+                  <td style={{ ...cellStyleRight, color: "var(--dv-green)" }}>{t.successCount}</td>
+                  <td style={{ ...cellStyleRight, color: t.failureCount > 0 ? "var(--dv-red)" : undefined }}>{t.failureCount}</td>
+                  <td style={cellStyleRight}>{t.retryCount}</td>
+                  <td style={cellStyleRight}>{t.avgDurationMs != null ? fmtDuration(Math.round(t.avgDurationMs)) : "-"}</td>
+                  <td style={cellStyleRight}>{t.maxDurationMs != null ? fmtDuration(t.maxDurationMs) : "-"}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+          {data.length === 0 && <div style={{ padding: 24, color: "var(--dv-text-secondary)", textAlign: "center" }}>No tool data yet</div>}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ── Files Page ─────────────────────────────────────────────────────
+
+function FilesPage() {
+  const timeline = useWorkshopStore((s) => s.timeline);
+  const fileData = useMemo(() => {
+    const counts: Record<string, number> = {};
+    for (const t of timeline) {
+      const e = t.event;
+      const raw = e.raw as Record<string, unknown>;
+      const toolInput = raw?.tool_input as Record<string, unknown> | undefined;
+      if (e.hookEventName === "PreToolUse" && toolInput) {
+        const fp = toolInput.file_path as string | undefined;
+        if (fp && (e.toolName === "Edit" || e.toolName === "Write" || e.toolName === "MultiEdit")) {
+          counts[fp] = (counts[fp] ?? 0) + 1;
+        }
+      }
+    }
+    return Object.entries(counts).sort((a, b) => b[1] - a[1]).map(([path, count]) => ({ path, count }));
+  }, [timeline]);
+
+  return (
+    <div style={chartContainerStyle}>
+      <span style={chartTitleStyle}>Modified Files ({fileData.length})</span>
+      <div style={{ overflowX: "auto" }}>
+        <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 13 }}>
+          <thead>
+            <tr>
+              <th style={{ ...thStyle, textAlign: "left" }}>File Path</th>
+              <th style={{ ...thStyle, textAlign: "right" }}>Times Modified</th>
+            </tr>
+          </thead>
+          <tbody>
+            {fileData.map((f) => (
+              <tr key={f.path} style={{ borderBottom: "1px solid var(--dv-border)" }}>
+                <td style={{ ...cellStyle, fontFamily: "var(--dv-font-mono)", fontSize: 12 }}>{f.path}</td>
+                <td style={cellStyleRight}>{f.count}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+        {fileData.length === 0 && <div style={{ padding: 24, color: "var(--dv-text-secondary)", textAlign: "center" }}>No file modifications yet</div>}
+      </div>
+    </div>
+  );
+}
+
+// ── Git Page ───────────────────────────────────────────────────────
+
+function GitPage() {
+  const timeline = useWorkshopStore((s) => s.timeline);
+  const derived = useMemo(() => {
+    const events = timeline.map((t) => t.event);
+    return deriveMetrics(events);
+  }, [timeline]);
+
+  const breakdown = useMemo(() => {
+    return Object.entries(derived.gitOpsBreakdown).sort((a, b) => b[1] - a[1]).map(([op, count]) => ({ op, count }));
+  }, [derived]);
+
+  const mostCommon = breakdown.length > 0 ? breakdown[0].op : "-";
+
+  return (
+    <div style={{ display: "flex", flexDirection: "column", gap: "var(--dv-space-md)" }}>
+      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "var(--dv-space-md)" }}>
+        <div style={chartContainerStyle}>
+          <span style={{ fontSize: 12, fontWeight: 600, textTransform: "uppercase" as const, letterSpacing: "0.04em", color: "var(--dv-text-secondary)" }}>Total Git Ops</span>
+          <span style={{ fontSize: 28, fontWeight: 700, color: "var(--dv-text-heading)" }}>{derived.gitOperations}</span>
+        </div>
+        <div style={chartContainerStyle}>
+          <span style={{ fontSize: 12, fontWeight: 600, textTransform: "uppercase" as const, letterSpacing: "0.04em", color: "var(--dv-text-secondary)" }}>Most Common Op</span>
+          <span style={{ fontSize: 28, fontWeight: 700, color: "var(--dv-blue)" }}>{mostCommon}</span>
+        </div>
+      </div>
+      <div style={chartContainerStyle}>
+        <span style={chartTitleStyle}>Git Operations Breakdown</span>
+        <div style={{ overflowX: "auto" }}>
+          <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 13 }}>
+            <thead>
+              <tr>
+                <th style={{ ...thStyle, textAlign: "left" }}>Operation</th>
+                <th style={{ ...thStyle, textAlign: "right" }}>Count</th>
+              </tr>
+            </thead>
+            <tbody>
+              {breakdown.map((r) => (
+                <tr key={r.op} style={{ borderBottom: "1px solid var(--dv-border)" }}>
+                  <td style={{ ...cellStyle, fontFamily: "var(--dv-font-mono)" }}>{r.op}</td>
+                  <td style={cellStyleRight}>{r.count}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+          {breakdown.length === 0 && <div style={{ padding: 24, color: "var(--dv-text-secondary)", textAlign: "center" }}>No git operations yet</div>}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ── Projects Page ──────────────────────────────────────────────────
+
+function ProjectsPage({
+  projects,
+  sessions,
+}: {
+  projects: Record<string, import("@agent-workshop/shared").SerializedProject>;
+  sessions: Record<string, import("@agent-workshop/shared").SerializedSession>;
+}) {
+  const rows = useMemo(() => {
+    return Object.values(projects).map((p) => {
+      const sessionCount = Object.values(sessions).filter((s) => s.projectId === p.id).length;
+      return { id: p.id, name: p.name, sessions: sessionCount, lastActivity: p.lastSeen };
+    }).sort((a, b) => Date.parse(b.lastActivity) - Date.parse(a.lastActivity));
+  }, [projects, sessions]);
+
+  return (
+    <div style={chartContainerStyle}>
+      <span style={chartTitleStyle}>Projects ({rows.length})</span>
+      <div style={{ overflowX: "auto" }}>
+        <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 13 }}>
+          <thead>
+            <tr>
+              <th style={{ ...thStyle, textAlign: "left" }}>Project Name</th>
+              <th style={{ ...thStyle, textAlign: "right" }}>Sessions</th>
+              <th style={{ ...thStyle, textAlign: "left" }}>Last Activity</th>
+            </tr>
+          </thead>
+          <tbody>
+            {rows.map((r) => (
+              <tr key={r.id} style={{ borderBottom: "1px solid var(--dv-border)" }}>
+                <td style={cellStyle}>{r.name}</td>
+                <td style={cellStyleRight}>{r.sessions}</td>
+                <td style={cellStyle}>{relativeTime(r.lastActivity)}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+        {rows.length === 0 && <div style={{ padding: 24, color: "var(--dv-text-secondary)", textAlign: "center" }}>No projects yet</div>}
+      </div>
+    </div>
+  );
+}
+
+// ── Tokens Page ────────────────────────────────────────────────────
+
+function TokensPage({ tokenData }: { tokenData: TokenBucket[] }) {
+  const totals = useMemo(() => {
+    let input = 0, output = 0, cacheRead = 0, cacheWrite = 0, apiCalls = 0;
+    for (const t of tokenData) {
+      input += t.inputTokens ?? 0;
+      output += t.outputTokens ?? 0;
+      cacheRead += t.cacheReadTokens ?? 0;
+      cacheWrite += t.cacheCreationTokens ?? 0;
+      apiCalls += t.apiCalls ?? 0;
+    }
+    const total = input + output + cacheRead + cacheWrite;
+    const cacheHit = total > 0 ? Math.round((cacheRead / total) * 100) : 0;
+    return { input, output, cacheRead, cacheWrite, total, apiCalls, cacheHit };
+  }, [tokenData]);
+
+  const contextLimit = 200_000;
+  const contextPct = Math.min(Math.round((totals.total / contextLimit) * 100), 100);
+
+  return (
+    <div style={{ display: "flex", flexDirection: "column", gap: "var(--dv-space-md)" }}>
+      {/* Summary cards */}
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: "var(--dv-space-md)" }}>
+        <div style={chartContainerStyle}>
+          <span className="dv-label" style={{ fontSize: 12, fontWeight: 600, textTransform: "uppercase" as const, color: "var(--dv-text-secondary)" }}>Total Tokens</span>
+          <span style={{ fontSize: 24, fontWeight: 700, color: "var(--dv-blue)" }}>{fmtNum(totals.total)}</span>
+        </div>
+        <div style={chartContainerStyle}>
+          <span className="dv-label" style={{ fontSize: 12, fontWeight: 600, textTransform: "uppercase" as const, color: "var(--dv-text-secondary)" }}>API Calls</span>
+          <span style={{ fontSize: 24, fontWeight: 700, color: "var(--dv-text-heading)" }}>{fmtNum(totals.apiCalls)}</span>
+        </div>
+        <div style={chartContainerStyle}>
+          <span className="dv-label" style={{ fontSize: 12, fontWeight: 600, textTransform: "uppercase" as const, color: "var(--dv-text-secondary)" }}>Cache Hit Rate</span>
+          <span style={{ fontSize: 24, fontWeight: 700, color: "var(--dv-green)" }}>{totals.cacheHit}%</span>
+        </div>
+        <div style={chartContainerStyle}>
+          <span className="dv-label" style={{ fontSize: 12, fontWeight: 600, textTransform: "uppercase" as const, color: "var(--dv-text-secondary)" }}>Context Window</span>
+          <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+            <span style={{ fontSize: 24, fontWeight: 700, color: contextPct > 80 ? "var(--dv-red)" : "var(--dv-text-heading)" }}>{contextPct}%</span>
+            <div style={{ height: 8, background: "var(--dv-border)", borderRadius: 4, overflow: "hidden" }}>
+              <div style={{ width: `${contextPct}%`, height: "100%", background: contextPct > 80 ? "var(--dv-red)" : "var(--dv-green)", borderRadius: 4 }} />
+            </div>
+          </div>
+        </div>
+      </div>
+      {/* Per-session breakdown */}
+      <div style={chartContainerStyle}>
+        <span style={chartTitleStyle}>Per-Session Breakdown</span>
+        <div style={{ overflowX: "auto" }}>
+          <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 13 }}>
+            <thead>
+              <tr>
+                {["Session", "Model", "API Calls", "Input", "Output", "Cache Write", "Cache Read", "Context"].map((h) => (
+                  <th key={h} style={{ ...thStyle, textAlign: h === "Session" || h === "Model" ? "left" : "right" }}>{h}</th>
+                ))}
+              </tr>
+            </thead>
+            <tbody>
+              {tokenData.map((t, i) => {
+                const total = (t.inputTokens ?? 0) + (t.outputTokens ?? 0) + (t.cacheReadTokens ?? 0) + (t.cacheCreationTokens ?? 0);
+                const pct = Math.min(Math.round((total / contextLimit) * 100), 100);
+                return (
+                  <tr key={`${t.sessionId}-${i}`} style={{ borderBottom: "1px solid var(--dv-border)" }}>
+                    <td style={{ ...cellStyle, fontFamily: "var(--dv-font-mono)", fontSize: 12 }}>{t.sessionId?.slice(0, 8) ?? "-"}</td>
+                    <td style={cellStyle}>{t.model ?? "-"}</td>
+                    <td style={cellStyleRight}>{t.apiCalls ?? 0}</td>
+                    <td style={cellStyleRight}>{fmtNum(t.inputTokens ?? 0)}</td>
+                    <td style={cellStyleRight}>{fmtNum(t.outputTokens ?? 0)}</td>
+                    <td style={cellStyleRight}>{fmtNum(t.cacheCreationTokens ?? 0)}</td>
+                    <td style={cellStyleRight}>{fmtNum(t.cacheReadTokens ?? 0)}</td>
+                    <td style={cellStyleRight}>{pct}%</td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+          {tokenData.length === 0 && <div style={{ padding: 24, color: "var(--dv-text-secondary)", textAlign: "center" }}>No token data yet</div>}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ── Waste Page ─────────────────────────────────────────────────────
+
+function WastePage({ tokenData }: { tokenData: TokenBucket[] }) {
+  const timeline = useWorkshopStore((s) => s.timeline);
+  const derived = useMemo(() => deriveMetrics(timeline.map((t) => t.event)), [timeline]);
+
+  const totals = useMemo(() => {
+    let input = 0, output = 0, cacheRead = 0, cacheWrite = 0;
+    for (const t of tokenData) { input += t.inputTokens ?? 0; output += t.outputTokens ?? 0; cacheRead += t.cacheReadTokens ?? 0; cacheWrite += t.cacheCreationTokens ?? 0; }
+    return { input, output, cacheRead, cacheWrite, total: input + output + cacheRead + cacheWrite };
+  }, [tokenData]);
+
+  // Estimate repeated reads from timeline
+  const repeatedReads = useMemo(() => {
+    const reads: Record<string, number> = {};
+    for (const t of timeline) {
+      const e = t.event;
+      if (e.hookEventName === "PreToolUse" && e.toolName === "Read") {
+        const raw = e.raw as Record<string, unknown>;
+        const fp = (raw?.tool_input as Record<string, unknown>)?.file_path as string | undefined;
+        if (fp) reads[fp] = (reads[fp] ?? 0) + 1;
+      }
+    }
+    return Object.values(reads).filter((c) => c > 1).reduce((s, c) => s + c - 1, 0);
+  }, [timeline]);
+
+  const contextNearLimit = totals.total > 160_000;
+  const wasteRatio = totals.total > 0 ? totals.cacheRead / totals.total : 0;
+  const excessCacheTokens = wasteRatio > 0.5 ? Math.round(totals.cacheRead * (wasteRatio - 0.5)) : 0;
+
+  const cardStyle: React.CSSProperties = { ...chartContainerStyle, borderLeft: "3px solid var(--dv-amber)" };
+
+  return (
+    <div style={{ display: "flex", flexDirection: "column", gap: "var(--dv-space-md)" }}>
+      <div style={cardStyle}>
+        <span style={{ ...chartTitleStyle, color: "var(--dv-amber)" }}>Failed Tool Calls</span>
+        <span style={{ fontSize: 28, fontWeight: 700, color: "var(--dv-amber)" }}>{derived.failedToolCalls}</span>
+        <span style={{ fontSize: 13, color: "var(--dv-text-secondary)" }}>
+          {derived.failedToolCalls > 0 ? "Review tool error patterns and fix common causes." : "No failures detected."}
+        </span>
+      </div>
+      <div style={cardStyle}>
+        <span style={{ ...chartTitleStyle, color: "var(--dv-amber)" }}>Repeated File Reads</span>
+        <span style={{ fontSize: 28, fontWeight: 700, color: "var(--dv-amber)" }}>{repeatedReads}</span>
+        <span style={{ fontSize: 13, color: "var(--dv-text-secondary)" }}>
+          {repeatedReads > 0 ? "Cache file contents to avoid re-reading the same files." : "No excessive re-reads detected."}
+        </span>
+      </div>
+      <div style={cardStyle}>
+        <span style={{ ...chartTitleStyle, color: "var(--dv-amber)" }}>Context Near Limit</span>
+        <span style={{ fontSize: 28, fontWeight: 700, color: contextNearLimit ? "var(--dv-red)" : "var(--dv-amber)" }}>
+          {contextNearLimit ? "Yes" : "No"}
+        </span>
+        <span style={{ fontSize: 13, color: "var(--dv-text-secondary)" }}>
+          {contextNearLimit ? "Split tasks into smaller sub-agents to reduce context size." : "Context usage is within safe limits."}
+        </span>
+      </div>
+      {excessCacheTokens > 0 && (
+        <div style={cardStyle}>
+          <span style={{ ...chartTitleStyle, color: "var(--dv-amber)" }}>Excess Cache Tokens</span>
+          <span style={{ fontSize: 28, fontWeight: 700, color: "var(--dv-amber)" }}>{fmtNum(excessCacheTokens)}</span>
+          <span style={{ fontSize: 13, color: "var(--dv-text-secondary)" }}>
+            High cache-read ratio suggests redundant context. Consider restructuring prompts.
+          </span>
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ── Permissions Page ───────────────────────────────────────────────
+
+interface PermissionEvent {
+  id: string;
+  sessionId: string;
+  agentId: string;
+  toolName: string | null;
+  commandPreview: string | null;
+  requestedAt: string;
+  decidedAt: string | null;
+  decision: string;
+  waitingDurationMs: number | null;
+  requestType: string;
+}
+
+function PermissionsPage({
+  projects,
+  sessions,
+}: {
+  projects: Record<string, import("@agent-workshop/shared").SerializedProject>;
+  sessions: Record<string, import("@agent-workshop/shared").SerializedSession>;
+}) {
+  const [data, setData] = useState<PermissionEvent[]>([]);
+  useEffect(() => {
+    fetch(`${API}/analytics/permissions`).then((r) => r.ok ? r.json() : []).then(setData).catch(() => {});
+  }, []);
+
+  const decisionColor = (d: string) => {
+    if (d === "approved" || d === "allow") return "var(--dv-green)";
+    if (d === "denied" || d === "deny") return "var(--dv-red)";
+    return "var(--dv-text-secondary)";
+  };
+
+  return (
+    <div style={chartContainerStyle}>
+      <span style={chartTitleStyle}>Permission History ({data.length})</span>
+      <div style={{ overflowX: "auto" }}>
+        <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 13 }}>
+          <thead>
+            <tr>
+              {["Time", "Project", "Agent", "Tool", "Decision", "Wait Time", "Source"].map((h) => (
+                <th key={h} style={{ ...thStyle, textAlign: h === "Wait Time" ? "right" : "left" }}>{h}</th>
+              ))}
+            </tr>
+          </thead>
+          <tbody>
+            {data.map((r) => {
+              const sess = sessions[r.sessionId];
+              const proj = sess ? projects[sess.projectId] : undefined;
+              return (
+                <tr key={r.id} style={{ borderBottom: "1px solid var(--dv-border)" }}>
+                  <td style={cellStyle}>{relativeTime(r.requestedAt)}</td>
+                  <td style={cellStyle}>{proj?.name ?? "-"}</td>
+                  <td style={{ ...cellStyle, fontFamily: "var(--dv-font-mono)", fontSize: 12 }}>{r.agentId.slice(0, 8)}</td>
+                  <td style={cellStyle}>{r.toolName ?? "-"}</td>
+                  <td style={{ ...cellStyle, color: decisionColor(r.decision), fontWeight: 600 }}>{r.decision}</td>
+                  <td style={cellStyleRight}>{r.waitingDurationMs != null ? fmtDuration(r.waitingDurationMs) : "-"}</td>
+                  <td style={cellStyle}>{r.requestType ?? "-"}</td>
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
+        {data.length === 0 && <div style={{ padding: 24, color: "var(--dv-text-secondary)", textAlign: "center" }}>No permission events yet</div>}
+      </div>
+    </div>
+  );
+}
+
+// ── Shared table header style ──────────────────────────────────────
+
+const thStyle: React.CSSProperties = {
+  padding: "8px 10px",
+  fontSize: 11,
+  fontWeight: 600,
+  textTransform: "uppercase",
+  letterSpacing: "0.04em",
+  color: "var(--dv-text-secondary)",
+  borderBottom: "1px solid var(--dv-border)",
+};
 
 // ── Main DataView ───────────────────────────────────────────────────
 
@@ -1003,7 +1551,7 @@ export function DataView() {
             padding: "var(--dv-space-lg)",
           }}
         >
-          {page === "overview" ? (
+          {page === "overview" && (
             <OverviewPage
               sessions={filteredSessions}
               projects={projects}
@@ -1011,9 +1559,17 @@ export function DataView() {
               pendingPermissions={pendingPermissions}
               timeRange={timeRange}
             />
-          ) : (
-            <PlaceholderPage page={page} />
           )}
+          {page === "sessions" && (
+            <SessionsPage sessions={filteredSessions} projects={projects} tokenData={tokenData} />
+          )}
+          {page === "tools" && <ToolsPage />}
+          {page === "files" && <FilesPage />}
+          {page === "git" && <GitPage />}
+          {page === "projects" && <ProjectsPage projects={projects} sessions={filteredSessions} />}
+          {page === "tokens" && <TokensPage tokenData={tokenData} />}
+          {page === "waste" && <WastePage tokenData={tokenData} />}
+          {page === "permissions" && <PermissionsPage projects={projects} sessions={filteredSessions} />}
         </main>
       </div>
     </div>
