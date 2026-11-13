@@ -1,7 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useWorkshopStore } from "./store/useWorkshopStore.js";
 import { connectDataSource } from "./data/connect.js";
-// ConnectionBadge replaced by the Live badge in the header
 import { SplashScreen } from "./components/SplashScreen.js";
 import { DebugView } from "./views/DebugView.js";
 import { WorkshopView } from "./views/WorkshopView.js";
@@ -10,12 +9,9 @@ import { DemoControlBar } from "./components/DemoControlBar.js";
 import { PermissionToastContainer, PermissionBadge } from "./components/PermissionToast.js";
 import { SplitStrip } from "./components/SplitStrip.js";
 import { isDemoMode, triggerDemoEvent } from "./data/demoSource.js";
-import { loadPrivacyEnabled, savePrivacyEnabled } from "./lib/privacy.js";
-import "./styles/reel-mode.css";
 
 const API_BASE = window.location.origin;
 const BASE_TITLE = "Mimir";
-const REEL_STORAGE_KEY = "mimir:reel:v1";
 const VIEW_STORAGE_KEY = "mimir:view:v1";
 
 // ── URL-based routing ──────────────────────────────────────
@@ -28,7 +24,6 @@ function readViewFromURL(): ViewMode {
   const params = new URLSearchParams(window.location.search);
   const v = params.get("view");
   if (v && VALID_VIEWS.includes(v as ViewMode)) return v as ViewMode;
-  // Fallback to localStorage
   try {
     const stored = localStorage.getItem(VIEW_STORAGE_KEY);
     if (stored && VALID_VIEWS.includes(stored as ViewMode)) return stored as ViewMode;
@@ -56,25 +51,6 @@ export function App() {
   const debugOverlayEnabled = useWorkshopStore((s) => s.debugOverlayEnabled);
   const toggleDebugOverlay = useWorkshopStore((s) => s.toggleDebugOverlay);
 
-  // Reel + Privacy toggles
-  const [reelMode, setReelMode] = useState(() => {
-    try { return localStorage.getItem(REEL_STORAGE_KEY) === "true"; } catch { return false; }
-  });
-  const [privacyOn, setPrivacyOn] = useState(loadPrivacyEnabled);
-
-  const toggleReel = useCallback(() => {
-    setReelMode((v) => {
-      const next = !v;
-      try { localStorage.setItem(REEL_STORAGE_KEY, String(next)); } catch { /* noop */ }
-      if (next && !privacyOn) { setPrivacyOn(true); savePrivacyEnabled(true); } // Privacy ON by default in reel
-      return next;
-    });
-  }, [privacyOn]);
-
-  const togglePrivacy = useCallback(() => {
-    setPrivacyOn((v) => { const next = !v; savePrivacyEnabled(next); return next; });
-  }, []);
-
   const setView = useCallback((v: ViewMode) => {
     setViewState(v);
     pushView(v);
@@ -100,20 +76,17 @@ export function App() {
     }
   }, []);
 
-  const openProjectInWorkshop = useCallback(
-    (projectId: string) => {
-      setProjectFilter(projectId);
-      setView("workshop");
-    },
-    [setProjectFilter, setView]
-  );
-  const openSessionInWorkshop = useCallback(
-    (sessionId: string) => {
-      setFocusedSession(sessionId);
-      setView("workshop");
-    },
-    [setFocusedSession, setView]
-  );
+  // Keyboard shortcuts: Ctrl+1/2/3 for views
+  useEffect(() => {
+    function onKey(e: KeyboardEvent) {
+      if (!e.ctrlKey && !e.metaKey) return;
+      if (e.key === "1") { e.preventDefault(); setView("workshop"); }
+      if (e.key === "2") { e.preventDefault(); setView("data"); }
+      if (e.key === "3") { e.preventDefault(); setView("split"); }
+    }
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [setView]);
 
   const sessions = useMemo(() => Object.values(sessionsById), [sessionsById]);
   const waitingForPermissionCount = useMemo(
@@ -127,43 +100,15 @@ export function App() {
     document.title = waitingForPermissionCount > 0 ? `(${waitingForPermissionCount}) ${BASE_TITLE}` : BASE_TITLE;
   }, [waitingForPermissionCount]);
 
-  // Keyboard shortcuts: Ctrl+1/2/3 for views, Escape exits reel mode
-  useEffect(() => {
-    function onKey(e: KeyboardEvent) {
-      if (e.key === "Escape" && reelMode) {
-        e.preventDefault();
-        setReelMode(false);
-        try { localStorage.setItem(REEL_STORAGE_KEY, "false"); } catch { /* noop */ }
-        return;
-      }
-      if (!e.ctrlKey && !e.metaKey) return;
-      if (e.key === "1") { e.preventDefault(); setView("workshop"); }
-      if (e.key === "2") { e.preventDefault(); setView("data"); }
-      if (e.key === "3") { e.preventDefault(); setView("split"); }
-    }
-    window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
-  }, [setView, reelMode]);
-
-  const appClass = [
-    "app",
-    reelMode ? "reel-mode" : "",
-    privacyOn ? "privacy-on" : "",
-  ].filter(Boolean).join(" ");
-
   const isLive = status === "live";
 
   return (
-    <div className={appClass}>
+    <div className="app">
       {showSplash && <SplashScreen onComplete={hideSplash} />}
-      {privacyOn && <div className="privacy-badge">Privacy ON</div>}
-      {reelMode && <div className="reel-watermark">mimir</div>}
-      {reelMode && <div className="reel-exit-hint">Esc to exit reel mode</div>}
 
       <header className="app-header">
         <span className="app-title">Mimir</span>
 
-        {/* Segmented view switch */}
         <div className="view-switch">
           <button className={`view-switch-btn ${view === "workshop" ? "active" : ""}`} onClick={() => setView("workshop")}>
             Workshop
@@ -178,19 +123,12 @@ export function App() {
 
         <span className="spacer" />
 
-        {/* Toggles */}
-        <button className={`header-toggle ${reelMode ? "on" : ""}`} onClick={toggleReel}>
-          Reel: {reelMode ? "on" : "off"}
-        </button>
-        <button className={`header-toggle ${privacyOn ? "on" : ""}`} onClick={togglePrivacy}>
-          Privacy: {privacyOn ? "on" : "off"}
-        </button>
-
         {/* Live badge */}
         <span className={`dv-live-badge ${isLive ? "" : "offline"}`}>
           <span className={`dv-live-dot ${isLive ? "pulsing" : ""}`} />
           {isLive ? "Live" : "Offline"}
         </span>
+
         {!isDemoMode() && view !== "split" && (
           <>
             <label className="debug-overlay-toggle">
@@ -216,7 +154,6 @@ export function App() {
         )}
         <PermissionBadge />
 
-        {/* Debug tab — hidden in split mode */}
         {!isDemoMode() && view !== "split" && (
           <button
             className={`tab-button tab-debug ${view === "debug" ? "active" : ""}`}
@@ -250,4 +187,3 @@ export function App() {
     </div>
   );
 }
-
