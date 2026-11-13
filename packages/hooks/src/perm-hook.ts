@@ -14,7 +14,8 @@
 //   5. On decision: output the appropriate JSON
 //   6. On timeout/error: exit silent (terminal takes over)
 //
-// Deliberately has zero import/export statements for portability.
+// NOTE: This file is saved as .mjs (ESM). Do NOT use require() — it's
+// undefined in ESM. Use dynamic import() for node built-ins.
 
 const COLLECTOR_URL = process.env.AGENT_WORKSHOP_URL || "http://127.0.0.1:4000";
 const TOKEN_PATH = process.env.MIMIR_TOKEN_PATH || "";
@@ -36,11 +37,13 @@ function readStdin(): Promise<string> {
   });
 }
 
-function readTokenFile(): string {
+async function readTokenFile(): Promise<string> {
   try {
-    const fs = require("node:fs");
-    const path = TOKEN_PATH || require("node:path").join(require("node:os").homedir(), ".claude", "agent-workshop", "mimir-token");
-    return fs.readFileSync(path, "utf-8").trim();
+    const { readFileSync } = await import("node:fs");
+    const { join } = await import("node:path");
+    const { homedir } = await import("node:os");
+    const tokenPath = TOKEN_PATH || join(homedir(), ".claude", "agent-workshop", "mimir-token");
+    return readFileSync(tokenPath, "utf-8").trim();
   } catch {
     return "";
   }
@@ -60,7 +63,7 @@ async function main(): Promise<void> {
   // Only handle PermissionRequest events
   if (payload.hook_event_name !== "PermissionRequest") return;
 
-  const token = readTokenFile();
+  const token = await readTokenFile();
   if (!token) return; // No token — can't authenticate, exit silent
 
   // POST the request to the server
