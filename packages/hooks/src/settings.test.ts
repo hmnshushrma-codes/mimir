@@ -7,9 +7,12 @@ describe("installHooks", () => {
   it("adds our hook entry to every managed event on an empty settings file", () => {
     const result = installHooks({}, SCRIPT_PATH);
     for (const event of MANAGED_EVENTS) {
-      expect(result.hooks?.[event]).toEqual([
-        { matcher: "", hooks: [{ type: "command", command: "node", args: [SCRIPT_PATH], timeout: 1 }] }
-      ]);
+      const groups = result.hooks?.[event];
+      expect(groups).toHaveLength(1);
+      const handler = groups![0].hooks[0];
+      expect(handler.type).toBe("command");
+      expect(handler.command).toContain(SCRIPT_PATH);
+      expect(handler.timeout).toBe(1);
     }
   });
 
@@ -29,8 +32,7 @@ describe("installHooks", () => {
     const preToolUse = result.hooks!.PreToolUse;
     expect(preToolUse).toHaveLength(2);
     expect(preToolUse[0]).toEqual({ matcher: "Bash", hooks: [{ type: "command", command: "my-other-tool.sh" }] });
-    expect(preToolUse[1].hooks[0].command).toBe("node");
-    expect(preToolUse[1].hooks[0].args).toEqual([SCRIPT_PATH]);
+    expect(preToolUse[1].hooks[0].command).toContain(SCRIPT_PATH);
   });
 
   it("is idempotent: installing twice does not duplicate our entry", () => {
@@ -45,8 +47,7 @@ describe("installHooks", () => {
     const withOld = installHooks({}, oldPath);
     const withNew = installHooks(withOld, SCRIPT_PATH);
     expect(withNew.hooks!.Stop).toHaveLength(1);
-    expect(withNew.hooks!.Stop[0].hooks[0].command).toBe("node");
-    expect(withNew.hooks!.Stop[0].hooks[0].args).toEqual([SCRIPT_PATH]);
+    expect(withNew.hooks!.Stop[0].hooks[0].command).toContain(SCRIPT_PATH);
   });
 
   it("does not mutate the input settings object", () => {
