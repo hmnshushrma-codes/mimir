@@ -65,26 +65,23 @@ try {
   // Tighter crop of the room itself, for the OG image
   const ogWorkshop = await page.screenshot({ clip: { x: 16, y: 150, width: 420, height: 640 } });
 
-  await page.getByRole("button", { name: "Analytics", exact: true }).click();
-  await page.waitForTimeout(1500);
-  const analytics = join(shotsDir, "analytics.png");
-  await page.screenshot({ path: analytics, clip: { x: 0, y: 0, width: 1280, height: 440 } });
-  console.log(`✓ ${analytics}`);
+  // Data view
+  await page.locator("button.view-switch-btn", { hasText: "Data" }).click();
+  await page.waitForTimeout(2000);
+  const data = join(shotsDir, "data.png");
+  await page.screenshot({ path: data });
+  console.log(`✓ ${data}`);
 
-  // Tokens subtab
-  const tokensBtn = page.locator("button.subtab", { hasText: "Tokens" });
-  if (await tokensBtn.isVisible()) {
-    await tokensBtn.click();
-    await page.waitForTimeout(1000);
-    const tokens = join(shotsDir, "tokens.png");
-    await page.screenshot({ path: tokens, clip: { x: 0, y: 0, width: 1280, height: 700 } });
-    console.log(`✓ ${tokens}`);
-  }
+  // Split view
+  await page.locator("button.view-switch-btn", { hasText: "Split" }).click();
+  await page.waitForTimeout(1500);
+  const split = join(shotsDir, "split.png");
+  await page.screenshot({ path: split });
+  console.log(`✓ ${split}`);
 
   // Back to Workshop for permission popup screenshot
-  await page.getByRole("button", { name: "Workshop", exact: true }).click();
+  await page.locator("button.view-switch-btn", { hasText: "Workshop" }).click();
   await page.waitForTimeout(500);
-  // Trigger a permission via demo control bar
   const permBtn = page.locator("button.demo-btn", { hasText: "Destructive" });
   if (await permBtn.isVisible()) {
     await permBtn.click();

@@ -43,7 +43,7 @@ delegation, permission request, error, and celebration as it happens.
 
 ### Analytics
 
-![Analytics overview: sessions, agents, tool calls, failures, permissions, total time](packages/web/public/screenshots/analytics.png)
+![Data dashboard: KPI cards, tool usage chart, sessions table](packages/web/public/screenshots/data.png)
 
 - **Session Analytics** — agents, tool calls, failures, duration per session
 - **Tool Execution Analytics** — most used tools, success/failure rates, avg duration, retries
