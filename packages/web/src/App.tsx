@@ -5,8 +5,7 @@ import { ConnectionBadge } from "./components/ConnectionBadge.js";
 import { SplashScreen } from "./components/SplashScreen.js";
 import { DebugView } from "./views/DebugView.js";
 import { WorkshopView } from "./views/WorkshopView.js";
-import { DashboardView } from "./views/DashboardView.js";
-import { AnalyticsView } from "./views/AnalyticsView.js";
+import { DataView } from "./views/DataView.js";
 import { DemoControlBar } from "./components/DemoControlBar.js";
 import { PermissionToastContainer, PermissionBadge } from "./components/PermissionToast.js";
 import { SplitStrip } from "./components/SplitStrip.js";
@@ -171,7 +170,7 @@ export function App() {
 
       <main className="main-content">
         {view === "workshop" && <WorkshopView />}
-        {view === "data" && <AnalyticsView />}
+        {view === "data" && <DataView />}
         {view === "split" && (
           <div className="split-view">
             <div className="split-workshop">
