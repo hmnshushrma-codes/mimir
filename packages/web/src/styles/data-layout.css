@@ -1,0 +1,424 @@
+/*
+ * Mimir Data View — Layout and component styles
+ * All colors reference data-theme.css tokens.
+ */
+
+/* ── Shell ───────────────────────────────────────────────── */
+
+.data-view {
+  display: flex;
+  height: 100%;
+  overflow: hidden;
+}
+
+/* ── Sidebar ─────────────────────────────────────────────── */
+
+.dv-sidebar {
+  width: var(--dv-sidebar-w);
+  background: var(--dv-bg-sidebar);
+  border-right: 1px solid var(--dv-border);
+  display: flex;
+  flex-direction: column;
+  padding: var(--dv-space-md) 0;
+  flex-shrink: 0;
+  overflow-y: auto;
+}
+
+.dv-sidebar-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 20px;
+  font-size: 14px;
+  color: var(--dv-text-secondary);
+  cursor: pointer;
+  border: none;
+  background: none;
+  width: 100%;
+  text-align: left;
+  border-radius: 0;
+  transition: color 0.15s, background 0.15s;
+}
+
+.dv-sidebar-item:hover {
+  color: var(--dv-text);
+  background: rgba(255,255,255,0.03);
+}
+
+.dv-sidebar-item.active {
+  color: var(--dv-green);
+  background: var(--dv-green-bg);
+}
+
+.dv-sidebar-icon {
+  width: 16px;
+  height: 16px;
+  opacity: 0.6;
+  flex-shrink: 0;
+}
+
+.dv-sidebar-item.active .dv-sidebar-icon {
+  opacity: 1;
+}
+
+/* ── Main area ───────────────────────────────────────────── */
+
+.dv-main {
+  flex: 1;
+  overflow-y: auto;
+  overflow-x: hidden;
+  padding: var(--dv-space-lg) var(--dv-space-xl);
+}
+
+.dv-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  margin-bottom: var(--dv-space-lg);
+  gap: var(--dv-space-md);
+  flex-wrap: wrap;
+}
+
+.dv-header-left {
+  flex: 1;
+  min-width: 200px;
+}
+
+.dv-header-right {
+  display: flex;
+  gap: var(--dv-space-sm);
+  align-items: center;
+  flex-wrap: wrap;
+}
+
+/* ── Filters ─────────────────────────────────────────────── */
+
+.dv-filter-btn {
+  font-family: var(--dv-font);
+  font-size: 13px;
+  padding: 6px 14px;
+  border-radius: var(--dv-radius-btn);
+  border: 1px solid var(--dv-border);
+  background: var(--dv-bg-card);
+  color: var(--dv-text-secondary);
+  cursor: pointer;
+  transition: all 0.15s;
+}
+
+.dv-filter-btn:hover { color: var(--dv-text); border-color: #3a4050; }
+.dv-filter-btn.active { color: var(--dv-text-heading); background: var(--dv-border); }
+
+.dv-filter-select {
+  font-family: var(--dv-font);
+  font-size: 13px;
+  padding: 6px 12px;
+  border-radius: var(--dv-radius-btn);
+  border: 1px solid var(--dv-border);
+  background: var(--dv-bg-card);
+  color: var(--dv-text);
+  cursor: pointer;
+}
+
+/* ── KPI grid ────────────────────────────────────────────── */
+
+.dv-kpi-grid {
+  display: grid;
+  grid-template-columns: repeat(6, 1fr);
+  gap: var(--dv-space-md);
+  margin-bottom: var(--dv-space-lg);
+}
+
+.dv-kpi-card {
+  background: var(--dv-bg-card);
+  border: 1px solid var(--dv-border);
+  border-radius: var(--dv-radius-card);
+  padding: var(--dv-card-padding);
+  cursor: pointer;
+  transition: border-color 0.15s, transform 0.1s;
+  position: relative;
+}
+
+.dv-kpi-card:hover { border-color: #3a4050; }
+.dv-kpi-card:focus-visible { outline: 2px solid var(--dv-green); outline-offset: 2px; }
+.dv-kpi-card:active { transform: scale(0.98); }
+
+.dv-kpi-card.amber { border-left: 3px solid var(--dv-amber); }
+.dv-kpi-card.amber:hover { border-color: var(--dv-amber); }
+
+.dv-kpi-label {
+  font-size: 12px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--dv-text-secondary);
+  margin-bottom: var(--dv-space-sm);
+}
+
+.dv-kpi-value {
+  font-size: 28px;
+  font-weight: 700;
+  color: var(--dv-text-heading);
+  line-height: 1.1;
+  font-variant-numeric: tabular-nums;
+}
+
+.dv-kpi-value.green { color: var(--dv-green); }
+.dv-kpi-value.red { color: var(--dv-red); }
+.dv-kpi-value.amber { color: var(--dv-amber); }
+.dv-kpi-value.blue { color: var(--dv-blue); }
+
+.dv-kpi-sub {
+  font-size: 12px;
+  color: var(--dv-text-secondary);
+  margin-top: 6px;
+}
+
+.dv-kpi-empty {
+  color: var(--dv-text-secondary);
+  opacity: 0.4;
+}
+
+/* ── Charts row ──────────────────────────────────────────── */
+
+.dv-charts-row {
+  display: grid;
+  grid-template-columns: 1.1fr 1fr;
+  gap: var(--dv-space-md);
+  margin-bottom: var(--dv-space-lg);
+}
+
+.dv-chart-card {
+  background: var(--dv-bg-card);
+  border: 1px solid var(--dv-border);
+  border-radius: var(--dv-radius-card);
+  padding: var(--dv-card-padding);
+  min-height: 290px;
+}
+
+.dv-chart-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: var(--dv-space-md);
+}
+
+.dv-chart-subtitle {
+  font-size: 12px;
+  color: var(--dv-text-secondary);
+}
+
+/* ── Tool usage bar chart ────────────────────────────────── */
+
+.dv-bar-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 10px;
+}
+
+.dv-bar-label {
+  width: 60px;
+  font-size: 13px;
+  text-align: right;
+  color: var(--dv-text);
+  flex-shrink: 0;
+}
+
+.dv-bar-track {
+  flex: 1;
+  height: 24px;
+  background: rgba(255,255,255,0.03);
+  border-radius: 4px;
+  overflow: hidden;
+  position: relative;
+}
+
+.dv-bar-fill {
+  height: 100%;
+  background: var(--dv-green);
+  border-radius: 4px;
+  transition: width 0.4s ease-out;
+  min-width: 2px;
+}
+
+.dv-bar-fill-fail {
+  height: 100%;
+  background: var(--dv-red);
+  position: absolute;
+  right: 0;
+  top: 0;
+  border-radius: 0 4px 4px 0;
+}
+
+.dv-bar-count {
+  width: 36px;
+  font-size: 13px;
+  color: var(--dv-text-secondary);
+  text-align: right;
+  flex-shrink: 0;
+  font-variant-numeric: tabular-nums;
+}
+
+/* ── Tokens over time chart ──────────────────────────────── */
+
+.dv-token-chart {
+  width: 100%;
+  height: 200px;
+}
+
+.dv-token-legend {
+  display: flex;
+  gap: 16px;
+  margin-top: 12px;
+  font-size: 12px;
+  color: var(--dv-text-secondary);
+}
+
+.dv-token-legend-item {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.dv-token-legend-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 2px;
+}
+
+/* ── Sessions table ──────────────────────────────────────── */
+
+.dv-table-card {
+  background: var(--dv-bg-card);
+  border: 1px solid var(--dv-border);
+  border-radius: var(--dv-radius-card);
+  padding: var(--dv-card-padding);
+  overflow-x: auto;
+}
+
+.dv-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 14px;
+}
+
+.dv-table th {
+  font-size: 12px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--dv-text-secondary);
+  text-align: left;
+  padding: 10px 12px;
+  border-bottom: 1px solid var(--dv-border);
+  cursor: pointer;
+  user-select: none;
+}
+
+.dv-table th:hover { color: var(--dv-text); }
+
+.dv-table td {
+  padding: 12px;
+  color: var(--dv-text);
+  border-bottom: 1px solid rgba(42,48,59,0.5);
+}
+
+.dv-table tr:hover td {
+  background: rgba(255,255,255,0.02);
+}
+
+.dv-table tr {
+  cursor: pointer;
+  transition: background 0.1s;
+}
+
+/* Status dots */
+.dv-status { display: flex; align-items: center; gap: 6px; }
+.dv-status-dot { width: 6px; height: 6px; border-radius: 50%; }
+.dv-status-active { background: var(--dv-green); color: var(--dv-green); }
+.dv-status-idle { background: var(--dv-amber); color: var(--dv-amber); }
+.dv-status-ended { background: var(--dv-text-secondary); color: var(--dv-text-secondary); }
+
+.dv-table-footer {
+  display: flex;
+  justify-content: center;
+  padding: 12px;
+}
+
+.dv-view-all {
+  font-family: var(--dv-font);
+  font-size: 13px;
+  color: var(--dv-green);
+  background: none;
+  border: none;
+  cursor: pointer;
+}
+.dv-view-all:hover { text-decoration: underline; }
+
+/* ── Placeholder page ────────────────────────────────────── */
+
+.dv-placeholder {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 300px;
+  color: var(--dv-text-secondary);
+  font-size: 16px;
+}
+
+/* ── Responsive ──────────────────────────────────────────── */
+
+@media (max-width: 1100px) {
+  .dv-sidebar { width: 56px; padding: var(--dv-space-sm) 0; }
+  .dv-sidebar-item { padding: 10px; justify-content: center; }
+  .dv-sidebar-item span:not(.dv-sidebar-icon) { display: none; }
+  .dv-kpi-grid { grid-template-columns: repeat(4, 1fr); }
+  .dv-charts-row { grid-template-columns: 1fr; }
+}
+
+@media (max-width: 720px) {
+  .dv-sidebar { display: none; }
+  .dv-kpi-grid { grid-template-columns: repeat(2, 1fr); }
+  .dv-main { padding: var(--dv-space-md); }
+  .dv-kpi-value { font-size: 22px; }
+}
+
+/* ── Live badge ──────────────────────────────────────────── */
+
+.dv-live-badge {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  font-weight: 600;
+  padding: 4px 12px;
+  border-radius: 20px;
+  border: 1px solid var(--dv-green);
+  color: var(--dv-green);
+}
+
+.dv-live-badge.offline {
+  border-color: var(--dv-text-secondary);
+  color: var(--dv-text-secondary);
+}
+
+.dv-live-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--dv-green);
+}
+
+.dv-live-dot.pulsing {
+  animation: dv-pulse 1.5s ease infinite;
+}
+
+@keyframes dv-pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.3; }
+}
+
+.dv-live-badge.offline .dv-live-dot {
+  background: var(--dv-text-secondary);
+  animation: none;
+}

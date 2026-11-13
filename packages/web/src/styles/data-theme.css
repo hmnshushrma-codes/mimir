@@ -1,0 +1,123 @@
+/*
+ * Mimir Data View — Design Tokens
+ * All colors, typography, spacing defined here.
+ * No hardcoded colors in component CSS — reference these vars.
+ */
+
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap');
+
+/* ── Data view tokens (scoped to .data-view) ────────────── */
+
+.data-view {
+  /* Background layers */
+  --dv-bg-app: #12151B;
+  --dv-bg-sidebar: #161A21;
+  --dv-bg-topbar: #181C24;
+  --dv-bg-card: #1A1F28;
+  --dv-border: #2A303B;
+
+  /* Text */
+  --dv-text: #E8EBF0;
+  --dv-text-secondary: #A3ACBA;
+  --dv-text-heading: #FFFFFF;
+
+  /* Accent colors */
+  --dv-green: #3DDC97;
+  --dv-blue: #4F8CFF;
+  --dv-amber: #F5C451;
+  --dv-red: #FF7A7A;
+
+  /* Derived */
+  --dv-green-bg: rgba(61, 220, 151, 0.08);
+  --dv-amber-bg: rgba(245, 196, 81, 0.08);
+  --dv-red-bg: rgba(255, 122, 122, 0.06);
+  --dv-blue-bg: rgba(79, 140, 255, 0.08);
+
+  /* Chart palette */
+  --dv-chart-1: #3DDC97;
+  --dv-chart-2: #4F8CFF;
+  --dv-chart-3: #F5C451;
+  --dv-chart-4: #A78BFA;
+  --dv-chart-5: #FF7A7A;
+
+  /* Token chart specific */
+  --dv-token-input: #4F8CFF;
+  --dv-token-output: #3DDC97;
+  --dv-token-cache-read: #A78BFA;
+  --dv-token-cache-write: #F5C451;
+
+  /* Typography */
+  --dv-font: 'Inter', system-ui, -apple-system, sans-serif;
+  --dv-font-mono: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+
+  /* Radius */
+  --dv-radius-card: 12px;
+  --dv-radius-btn: 8px;
+  --dv-radius-row: 8px;
+
+  /* Spacing */
+  --dv-space-xs: 4px;
+  --dv-space-sm: 8px;
+  --dv-space-md: 16px;
+  --dv-space-lg: 24px;
+  --dv-space-xl: 32px;
+
+  /* Sizing */
+  --dv-topbar-h: 56px;
+  --dv-sidebar-w: 220px;
+  --dv-card-padding: 20px;
+
+  /* Apply base */
+  font-family: var(--dv-font);
+  color: var(--dv-text);
+  background: var(--dv-bg-app);
+  font-variant-numeric: tabular-nums;
+  -webkit-font-smoothing: antialiased;
+}
+
+/* ── Typography scale ────────────────────────────────────── */
+
+.data-view .dv-page-title {
+  font-size: 28px;
+  font-weight: 700;
+  color: var(--dv-text-heading);
+  line-height: 1.2;
+}
+
+.data-view .dv-page-subtitle {
+  font-size: 14px;
+  color: var(--dv-text-secondary);
+  margin-top: 4px;
+}
+
+.data-view .dv-section-title {
+  font-size: 16px;
+  font-weight: 600;
+  color: var(--dv-text-heading);
+}
+
+.data-view .dv-label {
+  font-size: 12px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--dv-text-secondary);
+}
+
+.data-view .dv-body {
+  font-size: 14px;
+  color: var(--dv-text);
+}
+
+.data-view .dv-value {
+  font-size: 28px;
+  font-weight: 700;
+  color: var(--dv-text-heading);
+  line-height: 1.1;
+}
+
+.data-view .dv-sub {
+  font-size: 12px;
+  color: var(--dv-text-secondary);
+  margin-top: 4px;
+}
