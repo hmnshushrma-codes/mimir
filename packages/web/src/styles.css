@@ -141,9 +141,30 @@ body {
 }
 
 .split-workshop {
-  flex: 0 0 60%;
-  overflow: auto;
-  border-bottom: 2px solid var(--border);
+  flex: 1;
+  overflow: hidden;
+  min-height: 0;
+}
+
+/* In split mode: hide room backdrop ceiling to save vertical space */
+.split-workshop .room-backdrop {
+  display: none;
+}
+
+/* Compact the workshop content in split */
+.split-workshop .workshop-scene {
+  padding-top: 0;
+}
+
+/* Hide filter chips in split */
+.split-workshop .filter-chips {
+  display: none;
+}
+
+.split-data {
+  flex: 0 0 auto;
+  max-height: 180px;
+  border-top: 2px solid #2A303B;
 }
 
 .split-data {

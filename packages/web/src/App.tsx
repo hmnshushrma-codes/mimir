@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useWorkshopStore } from "./store/useWorkshopStore.js";
 import { connectDataSource } from "./data/connect.js";
-import { ConnectionBadge } from "./components/ConnectionBadge.js";
+// ConnectionBadge replaced by the Live badge in the header
 import { SplashScreen } from "./components/SplashScreen.js";
 import { DebugView } from "./views/DebugView.js";
 import { WorkshopView } from "./views/WorkshopView.js";
@@ -184,7 +184,7 @@ export function App() {
           <span className={`dv-live-dot ${isLive ? "pulsing" : ""}`} />
           {isLive ? "Live" : "Offline"}
         </span>
-        {!isDemoMode() && (
+        {!isDemoMode() && view !== "split" && (
           <>
             <label className="debug-overlay-toggle">
               <input type="checkbox" checked={debugOverlayEnabled} onChange={toggleDebugOverlay} />
@@ -205,13 +205,12 @@ export function App() {
             >
               Clear history
             </button>
-            <PermissionBadge />
-            <ConnectionBadge status={status} />
           </>
         )}
+        <PermissionBadge />
 
-        {/* Debug tab — small, separate from main view switch */}
-        {!isDemoMode() && (
+        {/* Debug tab — hidden in split mode */}
+        {!isDemoMode() && view !== "split" && (
           <button
             className={`tab-button tab-debug ${view === "debug" ? "active" : ""}`}
             onClick={() => setView("debug")}
