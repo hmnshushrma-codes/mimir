@@ -1,12 +1,12 @@
 /**
  * Split-mode KPI strip + live activity ticker.
- * Shows below the workshop in Split view.
- * Updates max 1/sec via throttle.
+ * Dark themed to match the Data view. Sits below the workshop.
  */
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import { deriveMetrics } from "@agent-workshop/shared";
 import { useWorkshopStore } from "../store/useWorkshopStore.js";
+import "../styles/data-theme.css";
 
 // ── Animated number ─────────────────────────────────────────
 
@@ -24,12 +24,11 @@ function AnimatedNumber({ value, prefix = "", suffix = "" }: { value: number | s
       return;
     }
 
-    // Count-up animation
     const duration = 400;
     const start = performance.now();
     function tick(now: number) {
       const t = Math.min((now - start) / duration, 1);
-      const eased = 1 - Math.pow(1 - t, 3); // ease-out cubic
+      const eased = 1 - Math.pow(1 - t, 3);
       setDisplay(Math.round(prev + (next - prev) * eased));
       if (t < 1) requestAnimationFrame(tick);
     }
@@ -41,37 +40,68 @@ function AnimatedNumber({ value, prefix = "", suffix = "" }: { value: number | s
 
 // ── KPI card ────────────────────────────────────────────────
 
-function KPI({ value, label, prefix, suffix, empty }: {
+function KPI({ value, label, prefix, suffix, empty, color }: {
   value: number | string;
   label: string;
   prefix?: string;
   suffix?: string;
   empty?: boolean;
+  color?: string;
 }) {
   return (
-    <div className="split-kpi">
-      <span className="split-kpi-value">
-        {empty ? <span className="split-kpi-empty">—</span> : <AnimatedNumber value={value} prefix={prefix} suffix={suffix} />}
-      </span>
-      <span className="split-kpi-label">{label}</span>
+    <div style={{
+      background: "var(--dv-bg-card, #1A1F28)",
+      border: "1px solid var(--dv-border, #2A303B)",
+      borderRadius: 12,
+      padding: "14px 8px",
+      textAlign: "center",
+      flex: 1,
+      minWidth: 90,
+    }}>
+      <div style={{
+        fontSize: 32,
+        fontWeight: 800,
+        color: color ?? "var(--dv-text-heading, #fff)",
+        lineHeight: 1.1,
+        fontVariantNumeric: "tabular-nums",
+      }}>
+        {empty ? <span style={{ opacity: 0.3 }}>—</span> : <AnimatedNumber value={value} prefix={prefix} suffix={suffix} />}
+      </div>
+      <div style={{
+        fontSize: 10,
+        fontWeight: 600,
+        textTransform: "uppercase",
+        letterSpacing: "0.06em",
+        color: "var(--dv-text-secondary, #A3ACBA)",
+        marginTop: 4,
+      }}>
+        {label}
+      </div>
     </div>
   );
 }
 
-// ── Activity ticker ─────────────────────────────────────────
+// ── Clean activity ticker ───────────────────────────────────
+
+const VERB_MAP: Record<string, string> = {
+  Read: "Reading", Edit: "Editing", Write: "Writing",
+  Bash: "Running", Grep: "Searching", Glob: "Finding",
+  Agent: "Delegating", WebFetch: "Fetching", WebSearch: "Searching web",
+};
 
 function useLiveTicker(): string[] {
   const timeline = useWorkshopStore((s) => s.timeline);
   return useMemo(() => {
     const items: string[] = [];
-    const recent = timeline.slice(-20).reverse();
+    const recent = timeline.slice(-30).reverse();
     for (const entry of recent) {
       const e = entry.event;
       if (e.hookEventName === "PreToolUse" && e.toolName) {
-        const target = e.target ? ` ${e.target.split("/").pop()?.slice(0, 30) ?? ""}` : "";
-        items.push(`${e.toolName}${target}`);
+        const verb = VERB_MAP[e.toolName] ?? e.toolName;
+        const file = e.target?.split("/").pop()?.slice(0, 25);
+        items.push(file ? `${verb} ${file}` : verb);
       }
-      if (items.length >= 5) break;
+      if (items.length >= 6) break;
     }
     return items.length > 0 ? items : ["Waiting for activity..."];
   }, [timeline]);
@@ -82,7 +112,6 @@ function useLiveTicker(): string[] {
 export function SplitStrip() {
   const timeline = useWorkshopStore((s) => s.timeline);
   const sessions = useWorkshopStore((s) => s.sessions);
-  const pendingPerms = useWorkshopStore((s) => s.pendingPermissions);
 
   // Throttle: compute metrics at most 1/sec
   const [throttledEvents, setThrottledEvents] = useState(timeline);
@@ -100,25 +129,49 @@ export function SplitStrip() {
 
   const sessionList = useMemo(() => Object.values(sessions), [sessions]);
   const activeAgents = useMemo(
-    () => sessionList.reduce((n, s) => n + s.agents.filter((a) => a.displayState === "working" || a.displayState === "thinking").length, 0),
+    () => sessionList.reduce((n, s) => n + s.agents.filter((a) =>
+      a.displayState === "working" || a.displayState === "thinking"
+    ).length, 0),
     [sessionList]
   );
 
   const hasData = events.length > 0;
 
   return (
-    <div className="split-strip">
-      <div className="split-strip-cards">
+    <div style={{
+      background: "var(--dv-bg-app, #12151B)",
+      padding: "16px 20px 12px",
+      fontFamily: "var(--dv-font, 'Inter', system-ui, sans-serif)",
+      display: "flex",
+      flexDirection: "column",
+      gap: 10,
+      height: "100%",
+      justifyContent: "center",
+    }}>
+      {/* KPI cards row */}
+      <div style={{ display: "flex", gap: 10 }}>
         <KPI value={activeAgents} label="Agents" empty={!hasData} />
-        <KPI value={metrics.totalToolCalls} label="Tools" empty={!hasData} />
-        <KPI value={metrics.linesAdded} label="Lines +" prefix="+" empty={!hasData} />
+        <KPI value={metrics.totalToolCalls} label="Tool Calls" empty={!hasData} />
+        <KPI value={metrics.linesAdded} label="Lines +" prefix="+" empty={!hasData} color="var(--dv-green, #3DDC97)" />
         <KPI value={metrics.filesModified} label="Files" empty={!hasData} />
-        <KPI value={metrics.successRate} label="Success" suffix="%" empty={!hasData} />
+        <KPI value={metrics.successRate} label="Success" suffix="%" empty={!hasData} color="var(--dv-green, #3DDC97)" />
         <KPI value={metrics.gitOperations} label="Git Ops" empty={!hasData} />
       </div>
-      <div className="split-ticker">
+
+      {/* Activity ticker */}
+      <div style={{
+        display: "flex",
+        gap: 20,
+        fontSize: 12,
+        color: "var(--dv-text-secondary, #A3ACBA)",
+        overflow: "hidden",
+        borderTop: "1px solid var(--dv-border, #2A303B)",
+        paddingTop: 8,
+      }}>
         {tickerItems.map((item, i) => (
-          <span key={i} className="split-ticker-item">{item}</span>
+          <span key={i} style={{ whiteSpace: "nowrap", display: "flex", alignItems: "center", gap: 4 }}>
+            <span style={{ color: "var(--dv-green, #3DDC97)" }}>&#9656;</span> {item}
+          </span>
         ))}
       </div>
     </div>
