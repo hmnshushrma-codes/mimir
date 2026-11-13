@@ -127,9 +127,15 @@ export function App() {
     document.title = waitingForPermissionCount > 0 ? `(${waitingForPermissionCount}) ${BASE_TITLE}` : BASE_TITLE;
   }, [waitingForPermissionCount]);
 
-  // Keyboard shortcuts: Ctrl+1/2/3 for views
+  // Keyboard shortcuts: Ctrl+1/2/3 for views, Escape exits reel mode
   useEffect(() => {
     function onKey(e: KeyboardEvent) {
+      if (e.key === "Escape" && reelMode) {
+        e.preventDefault();
+        setReelMode(false);
+        try { localStorage.setItem(REEL_STORAGE_KEY, "false"); } catch { /* noop */ }
+        return;
+      }
       if (!e.ctrlKey && !e.metaKey) return;
       if (e.key === "1") { e.preventDefault(); setView("workshop"); }
       if (e.key === "2") { e.preventDefault(); setView("data"); }
@@ -137,12 +143,12 @@ export function App() {
     }
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [setView]);
+  }, [setView, reelMode]);
 
   const appClass = [
     "app",
     reelMode ? "reel-mode" : "",
-    privacyOn ? "privacy-blur" : "",
+    privacyOn ? "privacy-on" : "",
   ].filter(Boolean).join(" ");
 
   const isLive = status === "live";
@@ -152,6 +158,7 @@ export function App() {
       {showSplash && <SplashScreen onComplete={hideSplash} />}
       {privacyOn && <div className="privacy-badge">Privacy ON</div>}
       {reelMode && <div className="reel-watermark">mimir</div>}
+      {reelMode && <div className="reel-exit-hint">Esc to exit reel mode</div>}
 
       <header className="app-header">
         <span className="app-title">Mimir</span>

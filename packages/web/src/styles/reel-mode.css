@@ -1,30 +1,22 @@
 /*
  * Reel Mode — overlay styles when recording for Instagram/YouTube
  * Applied via .reel-mode class on the app root.
+ * Escape key exits reel mode (handled in App.tsx).
  */
 
-/* ── 9:16 vertical (1080x1920) ───────────────────────────── */
-
-.reel-mode {
-  --reel-safe-top: 14%;
-  --reel-safe-bottom: 22%;
-  --reel-safe-right: 12%;
-}
-
-/* Hide chrome */
+/* Hide chrome in reel mode */
 .reel-mode .app-header { display: none; }
 .reel-mode .demo-control-bar { display: none; }
 .reel-mode .dv-sidebar { display: none; }
 .reel-mode .dv-header-right { display: none; }
+.reel-mode .filter-chips { display: none; }
 
 /* Enlarge text for readability on phones */
-.reel-mode .dv-kpi-value,
-.reel-mode .split-kpi-value {
+.reel-mode .dv-kpi-value {
   font-size: 40px;
 }
 
-.reel-mode .dv-kpi-label,
-.reel-mode .split-kpi-label {
+.reel-mode .dv-kpi-label {
   font-size: 14px;
 }
 
@@ -36,25 +28,7 @@
   font-size: 36px;
 }
 
-/* Safe zones */
-.reel-mode .main-content {
-  padding-top: var(--reel-safe-top);
-  padding-bottom: var(--reel-safe-bottom);
-  padding-right: var(--reel-safe-right);
-}
-
-/* Ticker above bottom zone */
-.reel-mode .split-ticker {
-  margin-bottom: calc(var(--reel-safe-bottom) + 10px);
-}
-
-/* Hide cursor */
-.reel-mode,
-.reel-mode * {
-  cursor: none !important;
-}
-
-/* Privacy badge */
+/* Privacy badge — always visible when privacy is on */
 .privacy-badge {
   position: fixed;
   top: 12px;
@@ -70,40 +44,35 @@
   pointer-events: none;
 }
 
+/* Reel exit hint — shown in reel mode */
+.reel-exit-hint {
+  position: fixed;
+  top: 12px;
+  right: 12px;
+  z-index: 2000;
+  font-size: 11px;
+  color: rgba(255,255,255,0.3);
+  pointer-events: none;
+}
+
 /* Watermark */
 .reel-watermark {
   position: fixed;
-  bottom: calc(var(--reel-safe-bottom, 22%) + 4px);
+  bottom: 16px;
   left: 16px;
   z-index: 2000;
   font-size: 12px;
   font-weight: 600;
-  color: rgba(255,255,255,0.3);
+  color: rgba(255,255,255,0.25);
   pointer-events: none;
   letter-spacing: 0.04em;
 }
 
-/* ── Fixed stage (scales to fit) ─────────────────────────── */
+/* ── Blurred prompt bubble (when privacy enabled) ────────── */
 
-.reel-stage-9x16 {
-  width: 1080px;
-  height: 1920px;
-  transform-origin: top left;
-  overflow: hidden;
-}
-
-.reel-stage-16x9 {
-  width: 1920px;
-  height: 1080px;
-  transform-origin: top left;
-  overflow: hidden;
-}
-
-/* ── Blurred prompt bubble ───────────────────────────────── */
-
-.privacy-blur .user-speech-bubble,
-.privacy-blur .user-speech-bubble-wrap,
-.privacy-blur .prompt-history {
+.privacy-on .user-speech-bubble,
+.privacy-on .user-speech-bubble-wrap,
+.privacy-on .prompt-history {
   filter: blur(6px);
   pointer-events: none;
 }
