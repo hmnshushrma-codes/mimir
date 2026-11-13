@@ -9,6 +9,7 @@ import { DashboardView } from "./views/DashboardView.js";
 import { AnalyticsView } from "./views/AnalyticsView.js";
 import { DemoControlBar } from "./components/DemoControlBar.js";
 import { PermissionToastContainer, PermissionBadge } from "./components/PermissionToast.js";
+import { SplitStrip } from "./components/SplitStrip.js";
 import { isDemoMode, triggerDemoEvent } from "./data/demoSource.js";
 
 const API_BASE = window.location.origin;
@@ -177,7 +178,7 @@ export function App() {
               <WorkshopView />
             </div>
             <div className="split-data">
-              <SplitStripPlaceholder />
+              <SplitStrip />
             </div>
           </div>
         )}
@@ -189,21 +190,3 @@ export function App() {
   );
 }
 
-/** Placeholder for the split-mode KPI strip — will be replaced with real data */
-function SplitStripPlaceholder() {
-  return (
-    <div className="split-strip">
-      <div className="split-strip-cards">
-        <div className="split-kpi"><span className="split-kpi-value">—</span><span className="split-kpi-label">Agents</span></div>
-        <div className="split-kpi"><span className="split-kpi-value">—</span><span className="split-kpi-label">Tools</span></div>
-        <div className="split-kpi"><span className="split-kpi-value">—</span><span className="split-kpi-label">Tokens</span></div>
-        <div className="split-kpi"><span className="split-kpi-value">—</span><span className="split-kpi-label">Cost</span></div>
-        <div className="split-kpi"><span className="split-kpi-value">—</span><span className="split-kpi-label">Success</span></div>
-        <div className="split-kpi"><span className="split-kpi-value">—</span><span className="split-kpi-label">Perms</span></div>
-      </div>
-      <div className="split-ticker">
-        <span className="split-ticker-item">Waiting for events...</span>
-      </div>
-    </div>
-  );
-}

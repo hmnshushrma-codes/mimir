@@ -193,6 +193,11 @@ body {
   margin-top: 2px;
 }
 
+.split-kpi-empty {
+  color: var(--text-muted);
+  opacity: 0.4;
+}
+
 .split-ticker {
   display: flex;
   gap: 16px;
