@@ -4,8 +4,11 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+    <link rel="canonical" href="https://mimir-demo.ninoforge.com" />
+    <meta name="robots" content="index, follow" />
     <title>Mimir — Watch your AI agents work</title>
-    <meta name="description" content="Live animated visualization for Claude Code sessions. Watch agents type, think, delegate, and collaborate at their desks in real time." />
+    <meta name="description" content="Live animated visualization for Claude Code sessions. Watch agents type, think, delegate, and collaborate at their desks in real time. Analytics, prompt coaching, and cost intelligence." />
+    <meta name="keywords" content="Claude Code, AI agent, visualization, developer tools, analytics, prompt quality, token cost, open source" />
 
     <!-- Open Graph -->
     <meta property="og:type" content="website" />
@@ -23,6 +26,36 @@
     <meta name="twitter:title" content="Mimir — Watch your AI agents work" />
     <meta name="twitter:description" content="Live animated visualization for Claude Code sessions. Open source." />
     <meta name="twitter:image" content="https://mimir-demo.ninoforge.com/og-image.png" />
+
+    <!-- Structured Data -->
+    <script type="application/ld+json">
+    {
+      "@context": "https://schema.org",
+      "@type": "SoftwareApplication",
+      "name": "Mimir",
+      "description": "Live animated visualization for Claude Code sessions. Watch agents type, think, delegate, and collaborate at their desks in real time.",
+      "url": "https://mimir-demo.ninoforge.com",
+      "applicationCategory": "DeveloperApplication",
+      "operatingSystem": "Windows, macOS, Linux",
+      "offers": { "@type": "Offer", "price": "0", "priceCurrency": "USD" },
+      "author": {
+        "@type": "Organization",
+        "name": "NinoForge",
+        "url": "https://ninoforge.com"
+      },
+      "softwareRequirements": "Node.js >= 22.13",
+      "license": "https://opensource.org/licenses/MIT"
+    }
+    </script>
+
+    <!-- Google Analytics -->
+    <script async src="https://www.googletagmanager.com/gtag/js?id=G-8G5VCXDVZD"></script>
+    <script>
+      window.dataLayer = window.dataLayer || [];
+      function gtag(){dataLayer.push(arguments);}
+      gtag('js', new Date());
+      gtag('config', 'G-8G5VCXDVZD');
+    </script>
   </head>
   <body>
     <div id="root"></div>

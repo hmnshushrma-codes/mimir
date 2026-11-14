@@ -1,6 +1,8 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { deriveMetrics } from "@agent-workshop/shared";
+import { deriveMetrics, assessPrompt, generatePromptRecommendation, computePromptOutcomes } from "@agent-workshop/shared";
+import type { PromptOutcome } from "@agent-workshop/shared";
 import { useWorkshopStore } from "../store/useWorkshopStore.js";
+import { isDemoMode } from "../data/demoSource.js";
 import "../styles/data-theme.css";
 
 // ── Constants ───────────────────────────────────────────────────────
@@ -11,7 +13,7 @@ const ANIMATE_MS = 400;
 
 type SidebarPage =
   | "overview" | "sessions" | "tools" | "files"
-  | "git" | "projects" | "tokens" | "waste" | "permissions";
+  | "git" | "projects" | "tokens" | "prompts" | "waste" | "permissions";
 
 const SIDEBAR_ITEMS: { key: SidebarPage; label: string }[] = [
   { key: "overview", label: "Overview" },
@@ -21,6 +23,7 @@ const SIDEBAR_ITEMS: { key: SidebarPage; label: string }[] = [
   { key: "git", label: "Git" },
   { key: "projects", label: "Projects" },
   { key: "tokens", label: "Tokens" },
+  { key: "prompts", label: "Prompts" },
   { key: "waste", label: "Waste" },
   { key: "permissions", label: "Permissions" },
 ];
@@ -132,6 +135,8 @@ interface TokenBucket {
   cacheCreationTokens: number;
   cacheReadTokens: number;
   apiCalls: number;
+  /** Context window of the latest request (not cumulative) */
+  latestContextTokens?: number;
   timestamp?: string;
 }
 
@@ -1079,8 +1084,14 @@ function TokensPage({ tokenData }: { tokenData: TokenBucket[] }) {
     return { input, output, cacheRead, cacheWrite, total, apiCalls, cacheHit };
   }, [tokenData]);
 
-  const contextLimit = 200_000;
-  const contextPct = Math.min(Math.round((totals.total / contextLimit) * 100), 100);
+  // Context = latest request only (not cumulative), 1M limit for Claude Code
+  const contextLimit = 1_000_000;
+  const latestContext = tokenData.length > 0
+    ? (tokenData[0].latestContextTokens ?? 0)
+    : 0;
+  const contextPct = contextLimit > 0
+    ? Math.min(Math.round((latestContext / contextLimit) * 100), 100)
+    : 0;
 
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: "var(--dv-space-md)" }}>
@@ -1122,8 +1133,8 @@ function TokensPage({ tokenData }: { tokenData: TokenBucket[] }) {
             </thead>
             <tbody>
               {tokenData.map((t, i) => {
-                const total = (t.inputTokens ?? 0) + (t.outputTokens ?? 0) + (t.cacheReadTokens ?? 0) + (t.cacheCreationTokens ?? 0);
-                const pct = Math.min(Math.round((total / contextLimit) * 100), 100);
+                const ctx = t.latestContextTokens ?? 0;
+                const pct = contextLimit > 0 ? Math.min(Math.round((ctx / contextLimit) * 100), 100) : 0;
                 return (
                   <tr key={`${t.sessionId}-${i}`} style={{ borderBottom: "1px solid var(--dv-border)" }}>
                     <td style={{ ...cellStyle, fontFamily: "var(--dv-font-mono)", fontSize: 12 }}>{t.sessionId?.slice(0, 8) ?? "-"}</td>
@@ -1285,6 +1296,337 @@ function PermissionsPage({
   );
 }
 
+// ── Prompts Page ──────────────────────────────────────────────────
+
+const DIMENSION_LABELS: Record<string, string> = {
+  objectiveClarity: "Objective Clarity",
+  taskSpecificity: "Task Specificity",
+  contextCompleteness: "Context",
+  scopeDefinition: "Scope",
+  constraints: "Constraints",
+  expectedOutput: "Expected Output",
+  acceptanceCriteria: "Acceptance Criteria",
+  verificationInstructions: "Verification",
+};
+
+function makeDemoOutcomes(): PromptOutcome[] {
+  const now = Date.now();
+  const texts = [
+    "Fix the login bug in auth.ts where expired tokens return 200 instead of 401",
+    "update the styles",
+    "Add pagination to the /api/users endpoint with limit and offset params, add tests",
+    "refactor",
+    "Create a new React component for the settings page with dark mode toggle and form validation",
+    "fix it",
+    "Migrate the database schema to add a `last_login` column to users table, write migration",
+    "something is broken",
+    "Add unit tests for the `validateToken` function covering expired, malformed, and valid cases",
+    "Deploy the app to staging and run smoke tests, make sure the health endpoint returns 200",
+  ];
+  return texts.map((t, i) => ({
+    promptText: t,
+    sessionId: `demo-${i}`,
+    timestamp: new Date(now - i * 600_000).toISOString(),
+    wallTimeMs: 5000 + Math.random() * 60000,
+    tokenEstimate: i % 3 === 0 ? { inputTokens: 1200 + i * 300, outputTokens: 800 + i * 200, cacheReadTokens: 400, cacheWriteTokens: 100, total: 2500 + i * 500 } : null,
+    apiCalls: 2 + Math.floor(Math.random() * 8),
+    toolCalls: 3 + Math.floor(Math.random() * 15),
+    failedToolCalls: i % 4 === 1 ? 2 + Math.floor(Math.random() * 3) : 0,
+    filesRead: 1 + Math.floor(Math.random() * 6),
+    filesEdited: Math.floor(Math.random() * 4),
+    filesReRead: i % 3 === 0 ? 2 : 0,
+    subagentsSpawned: i === 4 ? 2 : 0,
+    askedClarification: i === 3 || i === 7,
+    followedByCorrection: i === 1 || i === 3 || i === 5 || i === 7,
+    costEstimate: i % 3 === 0 ? 0.02 + Math.random() * 0.1 : null,
+  }));
+}
+
+function scoreColor(score: number): string {
+  if (score >= 80) return "var(--dv-green)";
+  if (score >= 50) return "var(--dv-amber)";
+  return "var(--dv-red)";
+}
+
+function barColor(score: number): string {
+  if (score >= 8) return "var(--dv-green)";
+  if (score >= 5) return "var(--dv-amber)";
+  return "var(--dv-red)";
+}
+
+function PromptsPage() {
+  const timeline = useWorkshopStore((s) => s.timeline);
+  const sessions = useWorkshopStore((s) => s.sessions);
+  const [expandedIdx, setExpandedIdx] = useState<number | null>(null);
+
+  const outcomes = useMemo(() => {
+    if (isDemoMode()) return makeDemoOutcomes();
+    const events = timeline.map((t) => t.event);
+    return computePromptOutcomes(events, 10);
+  }, [timeline]);
+
+  // Fetch per-turn tokens from transcript and merge into outcomes
+  const [enrichedOutcomes, setEnrichedOutcomes] = useState(outcomes);
+  useEffect(() => {
+    if (isDemoMode() || outcomes.length === 0) {
+      setEnrichedOutcomes(outcomes);
+      return;
+    }
+    // Find session IDs to fetch turn tokens for
+    const sessionIds = [...new Set(outcomes.map((o) => o.sessionId))];
+    Promise.all(
+      sessionIds.map((sid) =>
+        fetch(`${API}/analytics/tokens/${encodeURIComponent(sid)}/turns`)
+          .then((r) => r.ok ? r.json() : [])
+          .catch(() => [])
+          .then((turns: Array<{ timestamp: string; inputTokens: number; outputTokens: number; cacheCreationTokens: number; cacheReadTokens: number; apiCalls: number }>) =>
+            ({ sid, turns })
+          )
+      )
+    ).then((results) => {
+      const turnsBySession = new Map<string, typeof results[0]["turns"]>();
+      for (const { sid, turns } of results) turnsBySession.set(sid, turns);
+
+      // Match turns to outcomes by closest timestamp
+      const enriched = outcomes.map((o) => {
+        const turns = turnsBySession.get(o.sessionId) ?? [];
+        const promptTime = Date.parse(o.timestamp);
+        // Find the turn whose timestamp is closest to the prompt's
+        let bestTurn: typeof turns[0] | null = null;
+        let bestDiff = Infinity;
+        for (const t of turns) {
+          const diff = Math.abs(Date.parse(t.timestamp) - promptTime);
+          if (diff < bestDiff) { bestDiff = diff; bestTurn = t; }
+        }
+        if (bestTurn && bestDiff < 60_000) { // Within 1 minute
+          const total = bestTurn.inputTokens + bestTurn.outputTokens + bestTurn.cacheCreationTokens + bestTurn.cacheReadTokens;
+          return {
+            ...o,
+            tokenEstimate: {
+              inputTokens: bestTurn.inputTokens,
+              outputTokens: bestTurn.outputTokens,
+              cacheReadTokens: bestTurn.cacheReadTokens,
+              cacheWriteTokens: bestTurn.cacheCreationTokens,
+              total,
+            },
+            apiCalls: bestTurn.apiCalls || o.apiCalls,
+          };
+        }
+        return o;
+      });
+      setEnrichedOutcomes(enriched);
+    });
+  }, [outcomes]);
+
+  const assessments = useMemo(() =>
+    enrichedOutcomes.map((o) =>
+      o.promptText ? assessPrompt(o.sessionId, o.promptText) : null
+    ), [enrichedOutcomes]);
+
+  const recommendations = useMemo(() =>
+    enrichedOutcomes.map((o) =>
+      o.promptText ? generatePromptRecommendation(o.sessionId, o.promptText) : null
+    ), [enrichedOutcomes]);
+
+  // KPIs
+  const avgScore = useMemo(() => {
+    const scores = assessments.filter(Boolean).map((a) => a!.overallScore);
+    return scores.length > 0 ? Math.round(scores.reduce((s, v) => s + v, 0) / scores.length) : 0;
+  }, [assessments]);
+
+  const medianTokens = useMemo(() => {
+    const vals = enrichedOutcomes.map((o) => o.tokenEstimate?.total).filter((v): v is number => v != null).sort((a, b) => a - b);
+    if (vals.length === 0) return null;
+    const mid = Math.floor(vals.length / 2);
+    return vals.length % 2 === 0 ? Math.round((vals[mid - 1] + vals[mid]) / 2) : vals[mid];
+  }, [enrichedOutcomes]);
+
+  const correctionRate = useMemo(() => {
+    if (enrichedOutcomes.length === 0) return 0;
+    return Math.round((enrichedOutcomes.filter((o) => o.followedByCorrection).length / enrichedOutcomes.length) * 100);
+  }, [enrichedOutcomes]);
+
+  const wasteEstimate = useMemo(() => {
+    const failedCalls = enrichedOutcomes.reduce((s, o) => s + o.failedToolCalls, 0);
+    const reReads = outcomes.reduce((s, o) => s + o.filesReRead, 0);
+    return failedCalls + reReads;
+  }, [outcomes]);
+
+  // Coach tips
+  const coachTips = useMemo(() => {
+    const tips: string[] = [];
+    const noFilePath = assessments.filter((a) => a && a.dimensions.taskSpecificity < 4).length;
+    if (noFilePath > 2) tips.push(`${noFilePath}/${outcomes.length} prompts lacked specific file or function references`);
+    const vague = assessments.filter((a) => a && a.dimensions.ambiguity < 5).length;
+    if (vague > 2) tips.push(`${vague}/${outcomes.length} prompts contained vague language`);
+    const noVerify = assessments.filter((a) => a && a.dimensions.verificationInstructions < 3).length;
+    if (noVerify > 2) tips.push(`${noVerify}/${outcomes.length} prompts had no verification steps`);
+    const noScope = assessments.filter((a) => a && a.dimensions.scopeDefinition < 3).length;
+    if (noScope > 2) tips.push(`${noScope}/${outcomes.length} prompts had no scope boundaries`);
+    if (correctionRate > 30) tips.push(`${correctionRate}% correction rate — consider adding acceptance criteria`);
+    if (tips.length === 0) tips.push("Keep adding context and file paths to your prompts", "Define done-criteria for complex tasks", "Mention test/build commands for verification");
+    return tips.slice(0, 3);
+  }, [assessments, outcomes, correctionRate]);
+
+  if (outcomes.length === 0) {
+    return (
+      <div style={{ ...chartContainerStyle, padding: 48, textAlign: "center" }}>
+        <span style={{ fontSize: 16, color: "var(--dv-text-secondary)" }}>
+          Send a few prompts in Claude Code to see your coaching
+        </span>
+      </div>
+    );
+  }
+
+  return (
+    <div style={{ display: "flex", flexDirection: "column", gap: "var(--dv-space-md)" }}>
+      {/* KPI cards */}
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: "var(--dv-space-md)" }}>
+        <div style={chartContainerStyle} title="heuristic">
+          <span style={{ fontSize: 12, fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.04em", color: "var(--dv-text-secondary)" }}>Avg Quality Score</span>
+          <span style={{ fontSize: 28, fontWeight: 700, color: scoreColor(avgScore) }}>{avgScore}<span style={{ fontSize: 14, fontWeight: 400 }}>/100</span></span>
+          <span style={{ fontSize: 11, color: "var(--dv-text-secondary)" }}>heuristic</span>
+        </div>
+        <div style={chartContainerStyle}>
+          <span style={{ fontSize: 12, fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.04em", color: "var(--dv-text-secondary)" }}>Tokens / Prompt</span>
+          <span style={{ fontSize: 28, fontWeight: 700, color: "var(--dv-text-heading)" }}>{medianTokens != null ? fmtNum(medianTokens) : "N/A"}</span>
+          <span style={{ fontSize: 11, color: "var(--dv-text-secondary)" }}>{medianTokens != null ? "median" : "no token data"}</span>
+        </div>
+        <div style={chartContainerStyle}>
+          <span style={{ fontSize: 12, fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.04em", color: "var(--dv-text-secondary)" }}>Correction Rate</span>
+          <span style={{ fontSize: 28, fontWeight: 700, color: correctionRate > 30 ? "var(--dv-red)" : "var(--dv-text-heading)" }}>{correctionRate}%</span>
+          <span style={{ fontSize: 11, color: "var(--dv-text-secondary)" }}>followed by fix-up</span>
+        </div>
+        <div style={chartContainerStyle}>
+          <span style={{ fontSize: 12, fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.04em", color: "var(--dv-text-secondary)" }}>Estimated Waste</span>
+          <span style={{ fontSize: 28, fontWeight: 700, color: "var(--dv-amber)" }}>{wasteEstimate}</span>
+          <span style={{ fontSize: 11, color: "var(--dv-text-secondary)" }}>estimate (failures + re-reads)</span>
+        </div>
+      </div>
+
+      {/* Trend chart */}
+      <div style={chartContainerStyle}>
+        <span style={chartTitleStyle}>Score Trend (last {outcomes.length})</span>
+        <svg width="100%" height={60} viewBox={`0 0 ${outcomes.length * 40 + 20} 60`} style={{ display: "block" }}>
+          {[...outcomes].reverse().map((o, i) => {
+            const a = assessments[outcomes.length - 1 - i];
+            const s = a ? a.overallScore : 0;
+            const h = Math.max((s / 100) * 48, 2);
+            return (
+              <g key={i}>
+                <rect x={i * 40 + 10} y={52 - h} width={28} height={h} rx={4} fill={scoreColor(s)} opacity={0.85} />
+                <text x={i * 40 + 24} y={58} textAnchor="middle" fontSize={9} fill="var(--dv-text-secondary)" fontFamily="var(--dv-font-mono)">{s}</text>
+              </g>
+            );
+          })}
+        </svg>
+      </div>
+
+      <div style={{ display: "grid", gridTemplateColumns: "1fr 280px", gap: "var(--dv-space-md)" }}>
+        {/* Prompt list */}
+        <div style={chartContainerStyle}>
+          <span style={chartTitleStyle}>Recent Prompts</span>
+          <div style={{ display: "flex", flexDirection: "column", gap: 2 }}>
+            {outcomes.map((o, i) => {
+              const a = assessments[i];
+              const score = a ? a.overallScore : 0;
+              const expanded = expandedIdx === i;
+              const rec = recommendations[i];
+              return (
+                <div key={i}>
+                  <div
+                    onClick={() => setExpandedIdx(expanded ? null : i)}
+                    style={{ display: "flex", alignItems: "center", gap: 10, padding: "8px 10px", cursor: "pointer", borderRadius: "var(--dv-radius-btn)", background: expanded ? "rgba(255,255,255,0.03)" : "transparent" }}
+                  >
+                    <span style={{ fontSize: 11, color: "var(--dv-text-secondary)", width: 52, flexShrink: 0 }}>{relativeTime(o.timestamp)}</span>
+                    <span style={{ flex: 1, fontSize: 13, color: "var(--dv-text)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                      {o.promptText ? (o.promptText.length > 60 ? o.promptText.slice(0, 60) + "\u2026" : o.promptText) : "(no text)"}
+                    </span>
+                    <span title="heuristic" style={{ fontSize: 12, fontWeight: 600, color: scoreColor(score), background: `${scoreColor(score)}18`, padding: "2px 8px", borderRadius: 10, flexShrink: 0 }}>{score}</span>
+                    <span style={{ fontSize: 11, color: "var(--dv-text-secondary)", flexShrink: 0 }}>{o.toolCalls}tc</span>
+                    {o.failedToolCalls > 0 && <span style={{ fontSize: 11, color: "var(--dv-red)", flexShrink: 0 }}>{o.failedToolCalls}f</span>}
+                  </div>
+                  {expanded && a && (
+                    <div style={{ padding: "12px 10px 16px 62px", display: "flex", flexDirection: "column", gap: 14 }}>
+                      {/* Dimension bars */}
+                      <div>
+                        <span style={{ fontSize: 12, fontWeight: 600, color: "var(--dv-text-secondary)", marginBottom: 6, display: "block" }}>Dimensions</span>
+                        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "4px 16px" }}>
+                          {Object.entries(DIMENSION_LABELS).map(([key, label]) => {
+                            const val = (a.dimensions as unknown as Record<string, number>)[key] ?? 0;
+                            return (
+                              <div key={key} style={{ display: "flex", alignItems: "center", gap: 6 }}>
+                                <span style={{ width: 80, fontSize: 11, color: "var(--dv-text-secondary)", flexShrink: 0 }}>{label}</span>
+                                <div style={{ flex: 1, height: 6, background: "var(--dv-border)", borderRadius: 3, overflow: "hidden" }}>
+                                  <div style={{ width: `${val * 10}%`, height: "100%", background: barColor(val), borderRadius: 3 }} />
+                                </div>
+                                <span style={{ fontSize: 11, fontFamily: "var(--dv-font-mono)", color: "var(--dv-text-secondary)", width: 18, textAlign: "right" }}>{val}</span>
+                              </div>
+                            );
+                          })}
+                        </div>
+                      </div>
+                      {/* Missing requirements */}
+                      {a.missingRequirements.length > 0 && (
+                        <div>
+                          <span style={{ fontSize: 12, fontWeight: 600, color: "var(--dv-text-secondary)", marginBottom: 4, display: "block" }}>What was missing</span>
+                          {a.missingRequirements.map((m, mi) => (
+                            <div key={mi} style={{ fontSize: 12, color: "var(--dv-text)", padding: "2px 0", display: "flex", gap: 6 }}>
+                              <span style={{ color: "var(--dv-red)" }}>&#x2717;</span>{m}
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                      {/* Cost breakdown */}
+                      <div>
+                        <span style={{ fontSize: 12, fontWeight: 600, color: "var(--dv-text-secondary)", marginBottom: 4, display: "block" }}>What it cost</span>
+                        <div style={{ display: "flex", gap: 16, flexWrap: "wrap", fontSize: 12, color: "var(--dv-text)" }}>
+                          {[
+                            { label: "Tool calls", val: o.toolCalls, highlight: o.toolCalls > 10 },
+                            { label: "Failures", val: o.failedToolCalls, highlight: o.failedToolCalls > 2 },
+                            { label: "Re-reads", val: o.filesReRead, highlight: o.filesReRead > 1 },
+                            { label: "Correction", val: o.followedByCorrection ? "yes" : "no", highlight: o.followedByCorrection },
+                          ].map((c) => (
+                            <span key={c.label} style={{ color: c.highlight ? "var(--dv-red)" : undefined, fontWeight: c.highlight ? 600 : 400 }}>
+                              {c.label}: {c.val}{c.highlight ? " \u2190" : ""}
+                            </span>
+                          ))}
+                        </div>
+                      </div>
+                      {/* Better version */}
+                      {rec && (
+                        <div>
+                          <span style={{ fontSize: 12, fontWeight: 600, color: "var(--dv-text-secondary)", marginBottom: 4, display: "block" }}>Better version</span>
+                          <div style={{ fontSize: 12, color: "var(--dv-text)", background: "rgba(255,255,255,0.03)", padding: "8px 10px", borderRadius: 6, fontFamily: "var(--dv-font-mono)", whiteSpace: "pre-wrap" }}>
+                            {rec.improvedPrompt ?? "Enable prompt text storage to see rewrites"}
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+        </div>
+
+        {/* Coach panel */}
+        <div style={{ ...chartContainerStyle, borderLeft: "3px solid var(--dv-green)", alignSelf: "start" }}>
+          <span style={{ fontSize: 14, fontWeight: 700, color: "var(--dv-text-heading)" }}>Next Prompt Coach</span>
+          <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+            {coachTips.map((tip, i) => (
+              <div key={i} style={{ fontSize: 12, color: "var(--dv-text)", display: "flex", gap: 6, lineHeight: 1.4 }}>
+                <span style={{ color: "var(--dv-green)", flexShrink: 0 }}>{i + 1}.</span>
+                {tip}
+              </div>
+            ))}
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 // ── Shared table header style ──────────────────────────────────────
 
 const thStyle: React.CSSProperties = {
@@ -1361,6 +1703,7 @@ export function DataView() {
     git: { title: "Git", subtitle: "Git operations summary" },
     projects: { title: "Projects", subtitle: "Project-level analytics" },
     tokens: { title: "Tokens", subtitle: "Token consumption details" },
+    prompts: { title: "Prompts", subtitle: "Your last 10 prompts \u2014 what worked, what to improve" },
     waste: { title: "Waste", subtitle: "Wasted token analysis" },
     permissions: { title: "Permissions", subtitle: "Permission request log" },
   };
@@ -1568,6 +1911,7 @@ export function DataView() {
           {page === "git" && <GitPage />}
           {page === "projects" && <ProjectsPage projects={projects} sessions={filteredSessions} />}
           {page === "tokens" && <TokensPage tokenData={tokenData} />}
+          {page === "prompts" && <PromptsPage />}
           {page === "waste" && <WastePage tokenData={tokenData} />}
           {page === "permissions" && <PermissionsPage projects={projects} sessions={filteredSessions} />}
         </main>

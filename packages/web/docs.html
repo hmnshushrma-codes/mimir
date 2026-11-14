@@ -4,8 +4,33 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+    <link rel="canonical" href="https://mimir-demo.ninoforge.com/docs" />
+    <meta name="robots" content="index, follow" />
     <title>Mimir Docs — Watch your AI agents work</title>
     <meta name="description" content="Install, run, and understand Mimir — a live animated visualization of Claude Code sessions, with analytics, cost tracking, and prompt quality scoring." />
+    <meta name="keywords" content="Claude Code, Mimir, AI visualization, developer tools, documentation, setup guide" />
+
+    <!-- Google Analytics -->
+    <script async src="https://www.googletagmanager.com/gtag/js?id=G-8G5VCXDVZD"></script>
+    <script>
+      window.dataLayer = window.dataLayer || [];
+      function gtag(){dataLayer.push(arguments);}
+      gtag('js', new Date());
+      gtag('config', 'G-8G5VCXDVZD');
+    </script>
+
+    <!-- Structured Data -->
+    <script type="application/ld+json">
+    {
+      "@context": "https://schema.org",
+      "@type": "WebPage",
+      "name": "Mimir Documentation",
+      "description": "Install, run, and understand Mimir — a live animated visualization of Claude Code sessions.",
+      "url": "https://mimir-demo.ninoforge.com/docs",
+      "isPartOf": { "@type": "WebSite", "name": "Mimir", "url": "https://mimir-demo.ninoforge.com" },
+      "author": { "@type": "Organization", "name": "NinoForge", "url": "https://ninoforge.com" }
+    }
+    </script>
 
     <!-- Open Graph -->
     <meta property="og:type" content="website" />
@@ -297,7 +322,7 @@ mimir start             <span class="c"># Start the visualization</span></code><
             <div class="card"><h4>Tool analytics</h4><p>Most-used tools, success and failure rates, average duration, retries.</p></div>
             <div class="card"><h4>Tokens &amp; cost</h4><p>Plain-English token dashboard with memory gauge, cost breakdown, and savings tips.</p></div>
             <div class="card"><h4>Permission approval</h4><p>Remote allow/deny from the browser with risk tags, secret redaction, and audit log.</p></div>
-            <div class="card"><h4>Prompt quality</h4><p>A 10-dimension score for each prompt, with suggestions to improve it.</p></div>
+            <div class="card"><h4>Prompt coaching</h4><p>8-dimension scoring for each prompt, outcome attribution, correction detection, rewrite suggestions, and coaching tips.</p></div>
             <div class="card"><h4>Knowledge</h4><p>CLAUDE.md detection, frequently accessed files, and gaps worth documenting.</p></div>
             <div class="card"><h4>Permissions history</h4><p>Every request from pending to approved or cancelled, with how long it waited.</p></div>
           </div>
