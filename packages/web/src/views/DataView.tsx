@@ -1356,6 +1356,7 @@ function barColor(score: number): string {
 
 function PromptsPage() {
   const timeline = useWorkshopStore((s) => s.timeline);
+  const sessions = useWorkshopStore((s) => s.sessions);
   const [expandedIdx, setExpandedIdx] = useState<number | null>(null);
 
   const outcomes = useMemo(() => {
@@ -1364,15 +1365,68 @@ function PromptsPage() {
     return computePromptOutcomes(events, 10);
   }, [timeline]);
 
+  // Fetch per-turn tokens from transcript and merge into outcomes
+  const [enrichedOutcomes, setEnrichedOutcomes] = useState(outcomes);
+  useEffect(() => {
+    if (isDemoMode() || outcomes.length === 0) {
+      setEnrichedOutcomes(outcomes);
+      return;
+    }
+    // Find session IDs to fetch turn tokens for
+    const sessionIds = [...new Set(outcomes.map((o) => o.sessionId))];
+    Promise.all(
+      sessionIds.map((sid) =>
+        fetch(`${API}/analytics/tokens/${encodeURIComponent(sid)}/turns`)
+          .then((r) => r.ok ? r.json() : [])
+          .catch(() => [])
+          .then((turns: Array<{ timestamp: string; inputTokens: number; outputTokens: number; cacheCreationTokens: number; cacheReadTokens: number; apiCalls: number }>) =>
+            ({ sid, turns })
+          )
+      )
+    ).then((results) => {
+      const turnsBySession = new Map<string, typeof results[0]["turns"]>();
+      for (const { sid, turns } of results) turnsBySession.set(sid, turns);
+
+      // Match turns to outcomes by closest timestamp
+      const enriched = outcomes.map((o) => {
+        const turns = turnsBySession.get(o.sessionId) ?? [];
+        const promptTime = Date.parse(o.timestamp);
+        // Find the turn whose timestamp is closest to the prompt's
+        let bestTurn: typeof turns[0] | null = null;
+        let bestDiff = Infinity;
+        for (const t of turns) {
+          const diff = Math.abs(Date.parse(t.timestamp) - promptTime);
+          if (diff < bestDiff) { bestDiff = diff; bestTurn = t; }
+        }
+        if (bestTurn && bestDiff < 60_000) { // Within 1 minute
+          const total = bestTurn.inputTokens + bestTurn.outputTokens + bestTurn.cacheCreationTokens + bestTurn.cacheReadTokens;
+          return {
+            ...o,
+            tokenEstimate: {
+              inputTokens: bestTurn.inputTokens,
+              outputTokens: bestTurn.outputTokens,
+              cacheReadTokens: bestTurn.cacheReadTokens,
+              cacheWriteTokens: bestTurn.cacheCreationTokens,
+              total,
+            },
+            apiCalls: bestTurn.apiCalls || o.apiCalls,
+          };
+        }
+        return o;
+      });
+      setEnrichedOutcomes(enriched);
+    });
+  }, [outcomes]);
+
   const assessments = useMemo(() =>
-    outcomes.map((o) =>
+    enrichedOutcomes.map((o) =>
       o.promptText ? assessPrompt(o.sessionId, o.promptText) : null
-    ), [outcomes]);
+    ), [enrichedOutcomes]);
 
   const recommendations = useMemo(() =>
-    outcomes.map((o) =>
+    enrichedOutcomes.map((o) =>
       o.promptText ? generatePromptRecommendation(o.sessionId, o.promptText) : null
-    ), [outcomes]);
+    ), [enrichedOutcomes]);
 
   // KPIs
   const avgScore = useMemo(() => {
@@ -1381,19 +1435,19 @@ function PromptsPage() {
   }, [assessments]);
 
   const medianTokens = useMemo(() => {
-    const vals = outcomes.map((o) => o.tokenEstimate?.total).filter((v): v is number => v != null).sort((a, b) => a - b);
+    const vals = enrichedOutcomes.map((o) => o.tokenEstimate?.total).filter((v): v is number => v != null).sort((a, b) => a - b);
     if (vals.length === 0) return null;
     const mid = Math.floor(vals.length / 2);
     return vals.length % 2 === 0 ? Math.round((vals[mid - 1] + vals[mid]) / 2) : vals[mid];
-  }, [outcomes]);
+  }, [enrichedOutcomes]);
 
   const correctionRate = useMemo(() => {
-    if (outcomes.length === 0) return 0;
-    return Math.round((outcomes.filter((o) => o.followedByCorrection).length / outcomes.length) * 100);
-  }, [outcomes]);
+    if (enrichedOutcomes.length === 0) return 0;
+    return Math.round((enrichedOutcomes.filter((o) => o.followedByCorrection).length / enrichedOutcomes.length) * 100);
+  }, [enrichedOutcomes]);
 
   const wasteEstimate = useMemo(() => {
-    const failedCalls = outcomes.reduce((s, o) => s + o.failedToolCalls, 0);
+    const failedCalls = enrichedOutcomes.reduce((s, o) => s + o.failedToolCalls, 0);
     const reReads = outcomes.reduce((s, o) => s + o.filesReRead, 0);
     return failedCalls + reReads;
   }, [outcomes]);

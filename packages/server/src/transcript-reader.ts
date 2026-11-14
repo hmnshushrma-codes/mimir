@@ -323,3 +323,109 @@ export function readSubagentTranscripts(mainTranscriptPath: string): SubagentTok
 
   return results;
 }
+
+// ─── Per-turn (per-prompt) token breakdown ────────────────────────
+
+export interface TurnTokens {
+  /** Index of the turn (0-based) */
+  turnIndex: number;
+  /** Timestamp of the user message that started this turn */
+  timestamp: string;
+  /** Deduped token totals for this turn */
+  inputTokens: number;
+  outputTokens: number;
+  cacheCreationTokens: number;
+  cacheReadTokens: number;
+  /** Number of API calls (deduped requests) in this turn */
+  apiCalls: number;
+}
+
+/**
+ * Read the transcript and compute per-turn token breakdown.
+ * A "turn" starts at each user message and includes all assistant
+ * responses until the next user message (or end of file).
+ * Deduplicates by requestId within each turn.
+ */
+export function readPerTurnTokens(transcriptPath: string): TurnTokens[] {
+  if (!existsSync(transcriptPath)) return [];
+
+  let content: string;
+  try {
+    content = readFileSync(transcriptPath, "utf-8");
+  } catch {
+    return [];
+  }
+
+  const lines = content.split("\n");
+
+  // First pass: find turn boundaries (user message timestamps)
+  // and collect assistant usage entries with timestamps
+  interface RawEntry {
+    type: string;
+    timestamp?: string;
+    requestId?: string;
+    message?: { usage?: Record<string, number>; model?: string };
+  }
+
+  const turns: Array<{ timestamp: string; entries: Map<string, TranscriptUsageEntry> }> = [];
+  let currentTurn: { timestamp: string; entries: Map<string, TranscriptUsageEntry> } | null = null;
+
+  for (const line of lines) {
+    const trimmed = line.trim();
+    if (!trimmed) continue;
+
+    let parsed: RawEntry;
+    try {
+      parsed = JSON.parse(trimmed);
+    } catch {
+      continue;
+    }
+
+    if (parsed.type === "user") {
+      // Start a new turn
+      const ts = (parsed.timestamp as string) ?? new Date().toISOString();
+      currentTurn = { timestamp: ts, entries: new Map() };
+      turns.push(currentTurn);
+      continue;
+    }
+
+    if (parsed.type === "assistant" && currentTurn) {
+      const usage = parsed.message?.usage;
+      if (!usage || typeof usage.input_tokens !== "number") continue;
+      const model = parsed.message?.model ?? "";
+      if (model === "<synthetic>") continue;
+
+      const requestId = parsed.requestId ?? `unknown-${Date.now()}-${Math.random()}`;
+      // Last-entry-wins dedup per requestId
+      currentTurn.entries.set(requestId, {
+        requestId,
+        model,
+        inputTokens: usage.input_tokens,
+        outputTokens: usage.output_tokens ?? 0,
+        cacheCreationTokens: usage.cache_creation_input_tokens ?? 0,
+        cacheReadTokens: usage.cache_read_input_tokens ?? 0,
+        timestamp: (parsed.timestamp as string) ?? "",
+      });
+    }
+  }
+
+  // Sum per turn
+  return turns.map((turn, i) => {
+    let inputTokens = 0, outputTokens = 0, cacheCreationTokens = 0, cacheReadTokens = 0;
+    for (const entry of turn.entries.values()) {
+      inputTokens += entry.inputTokens;
+      outputTokens += entry.outputTokens;
+      cacheCreationTokens += entry.cacheCreationTokens;
+      cacheReadTokens += entry.cacheReadTokens;
+    }
+    return {
+      turnIndex: i,
+      timestamp: turn.timestamp,
+      inputTokens,
+      outputTokens,
+      cacheCreationTokens,
+      cacheReadTokens,
+      apiCalls: turn.entries.size,
+    };
+  });
+}

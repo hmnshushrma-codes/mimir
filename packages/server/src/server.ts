@@ -59,6 +59,7 @@ import {
   buildSummary,
   getContextLimit,
   readSubagentTranscripts,
+  readPerTurnTokens,
   type TranscriptReaderState,
   type SessionTokenSummary,
 } from "./transcript-reader.js";
@@ -544,6 +545,13 @@ export function buildApp({
     const reader = transcriptReaders.get(request.params.id);
     if (!reader) return [];
     return readSubagentTranscripts(reader.path);
+  });
+
+  /** Per-turn (per-prompt) token breakdown from transcript. */
+  app.get<{ Params: { id: string } }>("/analytics/tokens/:id/turns", async (request) => {
+    const reader = transcriptReaders.get(request.params.id);
+    if (!reader) return [];
+    return readPerTurnTokens(reader.path);
   });
 
   app.get("/analytics/sessions", async () => {
