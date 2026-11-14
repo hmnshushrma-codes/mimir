@@ -132,6 +132,8 @@ interface TokenBucket {
   cacheCreationTokens: number;
   cacheReadTokens: number;
   apiCalls: number;
+  /** Context window of the latest request (not cumulative) */
+  latestContextTokens?: number;
   timestamp?: string;
 }
 
@@ -1079,8 +1081,14 @@ function TokensPage({ tokenData }: { tokenData: TokenBucket[] }) {
     return { input, output, cacheRead, cacheWrite, total, apiCalls, cacheHit };
   }, [tokenData]);
 
-  const contextLimit = 200_000;
-  const contextPct = Math.min(Math.round((totals.total / contextLimit) * 100), 100);
+  // Context = latest request only (not cumulative), 1M limit for Claude Code
+  const contextLimit = 1_000_000;
+  const latestContext = tokenData.length > 0
+    ? (tokenData[0].latestContextTokens ?? 0)
+    : 0;
+  const contextPct = contextLimit > 0
+    ? Math.min(Math.round((latestContext / contextLimit) * 100), 100)
+    : 0;
 
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: "var(--dv-space-md)" }}>
@@ -1122,8 +1130,8 @@ function TokensPage({ tokenData }: { tokenData: TokenBucket[] }) {
             </thead>
             <tbody>
               {tokenData.map((t, i) => {
-                const total = (t.inputTokens ?? 0) + (t.outputTokens ?? 0) + (t.cacheReadTokens ?? 0) + (t.cacheCreationTokens ?? 0);
-                const pct = Math.min(Math.round((total / contextLimit) * 100), 100);
+                const ctx = t.latestContextTokens ?? 0;
+                const pct = contextLimit > 0 ? Math.min(Math.round((ctx / contextLimit) * 100), 100) : 0;
                 return (
                   <tr key={`${t.sessionId}-${i}`} style={{ borderBottom: "1px solid var(--dv-border)" }}>
                     <td style={{ ...cellStyle, fontFamily: "var(--dv-font-mono)", fontSize: 12 }}>{t.sessionId?.slice(0, 8) ?? "-"}</td>
