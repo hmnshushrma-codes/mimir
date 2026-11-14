@@ -43,7 +43,7 @@ describe("computePromptOutcomes", () => {
     const events = [
       ev("UserPromptSubmit", "run tests"),
       ev("PreToolUse", "npm test", "Bash"),
-      ev("PostToolUseFailure", null, "Bash"),
+      ev("PostToolUseFailure", undefined, "Bash"),
       ev("PreToolUse", "npm test", "Bash"),
     ];
     const o = computePromptOutcomes(events)[0];
