@@ -20,3 +20,4 @@ export * from "./knowledge-inventory.js";
 export * from "./knowledge-gaps.js";
 export * from "./redact.js";
 export * from "./data-derivation.js";
+export * from "./prompt-outcomes.js";
