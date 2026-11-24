@@ -5,8 +5,21 @@ All notable changes to Mimir are documented here.
 ## [Unreleased]
 
 ### Added
+- **Mimir Work module (MW-01, MW-02)** — personal work ledger foundation
+  - Core types: `WorkItem`, `WorkItemEvent`, `Sprint`, `PullRequest`, `Connection`, `SourceKind`, `StatusBucket`
+  - `mapStatus()` — maps raw statuses from GitHub, Jira, Bitbucket, Vercel to unified buckets (64 test cases)
+  - `WorkStore` interface — items, events, sprints, PRs, connections, session links, report snapshots
+  - SQLite implementation with 7 additive tables, upsert semantics, status events only on change
+  - Contract test suite (12 tests) with 3-sync fixture scenario
+
+## [0.6.0] — 2026-11-25
+
+### Added
 - **Prompts page** — 8-dimension prompt quality scoring with outcome attribution, per-prompt token usage from transcript, correction detection, coaching tips, rewrite suggestions
 - **Per-turn token breakdown** — server endpoint `/analytics/tokens/:id/turns` computes tokens per prompt from transcript
+- **Google Analytics** — `G-8G5VCXDVZD` on demo site and docs page
+- **SEO** — JSON-LD structured data (`SoftwareApplication`, `WebPage`), canonical URLs, robots meta, keywords
+- **CHANGELOG.md** — version history from 0.1.0 to current
 
 ### Fixed
 - **Tokens context %** — was showing 100% red (cumulative tokens / 200K). Now correctly uses latest request's context / 1M
