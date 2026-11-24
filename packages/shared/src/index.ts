@@ -22,3 +22,4 @@ export * from "./redact.js";
 export * from "./data-derivation.js";
 export * from "./prompt-outcomes.js";
 export * from "./prompt-scoring-config.js";
+export * from "./work/types.js";
