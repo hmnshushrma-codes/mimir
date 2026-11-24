@@ -24,4 +24,3 @@ export * from "./prompt-outcomes.js";
 export * from "./prompt-scoring-config.js";
 export * from "./work/types.js";
 export * from "./work/store.js";
-export { runStoreContract } from "./work/store.test.js";
